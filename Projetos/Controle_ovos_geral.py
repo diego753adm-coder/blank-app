@@ -79,7 +79,22 @@ class DatabaseManager:
 DatabaseManager.inicializar()
 
 # ==============================================================================
-# 2. CONFIGURAÇÃO GERAL E ESTILO VISUAL SAAS (NÚMEROS MAIORES & RESPONSIVO)
+# 2. SISTEMA DE AVISOS BLINDADOS CONTRA MUDANÇAS DE TEMA (DARK/LIGHT MODE)
+# ==============================================================================
+def show_warning(msg):
+    st.markdown(f'<div style="background-color: #FFFBEB; border: 1px solid #FEF3C7; border-left: 6px solid #F59E0B; padding: 14px 18px; border-radius: 8px; color: #92400E; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">⚠️ &nbsp; {msg}</div>', unsafe_allow_html=True)
+
+def show_info(msg):
+    st.markdown(f'<div style="background-color: #EFF6FF; border: 1px solid #DBEAFE; border-left: 6px solid #3B82F6; padding: 14px 18px; border-radius: 8px; color: #1E3A8A; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">ℹ️ &nbsp; {msg}</div>', unsafe_allow_html=True)
+
+def show_success(msg):
+    st.markdown(f'<div style="background-color: #F0FDF4; border: 1px solid #DCFCE7; border-left: 6px solid #22C55E; padding: 14px 18px; border-radius: 8px; color: #166534; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">✅ &nbsp; {msg}</div>', unsafe_allow_html=True)
+
+def show_error(msg):
+    st.markdown(f'<div style="background-color: #FEF2F2; border: 1px solid #FEE2E2; border-left: 6px solid #EF4444; padding: 14px 18px; border-radius: 8px; color: #991B1B; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">❌ &nbsp; {msg}</div>', unsafe_allow_html=True)
+
+# ==============================================================================
+# 3. CONFIGURAÇÃO GERAL E ESTILO VISUAL SAAS (RESTAURADO E RESPONSIVO)
 # ==============================================================================
 st.set_page_config(
     page_title="Hub Operacional de Ovos • Balsas 117",
@@ -94,16 +109,18 @@ st.markdown("""
 
     html, body, [class*="css"], .stApp {
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        font-size: 14px !important;
+        font-size: 14.5px !important;
         background-color: #EDF5EE !important;
         color: #1F2937 !important;
     }
 
+    /* TOPO LIMPO */
     header[data-testid="stHeader"] {
         background-color: transparent !important;
         box-shadow: none !important;
     }
 
+    /* RESPONSIVIDADE TOTAL: Ocupa 100% da largura ao recolher a barra */
     .block-container {
         padding-top: 1rem !important; 
         padding-bottom: 3rem !important;
@@ -113,6 +130,7 @@ st.markdown("""
         width: 100% !important;
     }
 
+    /* BARRA LATERAL COM TRANSIÇÃO NATIVA FLUIDA */
     section[data-testid="stSidebar"] {
         background-color: #132517 !important;
         border-right: 1px solid #0E1B11 !important;
@@ -121,19 +139,25 @@ st.markdown("""
         color: #E2E8F0 !important;
     }
     
+    /* BOTÃO DE RECUO SEMPRE VISÍVEL */
     [data-testid="stSidebarCollapseButton"], [data-testid="collapsedControl"] {
         opacity: 1 !important;
         visibility: visible !important;
         color: #84A98C !important;
         background-color: transparent !important;
     }
+    [data-testid="stSidebarCollapseButton"] svg {
+        stroke: #84A98C !important;
+        fill: #84A98C !important;
+    }
 
+    /* CAIXA DA MARCA (ALINHADA AO TOPO) */
     .brand-box {
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
         padding: 12px 14px;
-        margin-top: -25px !important;
+        margin-top: -20px !important;
         margin-bottom: 20px;
         display: flex;
         align-items: center;
@@ -151,14 +175,14 @@ st.markdown("""
         border: 1px solid #37643E;
     }
     .brand-title {
-        font-size: 0.95rem;
+        font-size: 1rem;
         font-weight: 800;
         color: #FFFFFF !important;
         margin: 0;
         letter-spacing: -0.01em;
     }
     .brand-sub {
-        font-size: 0.72rem;
+        font-size: 0.75rem;
         color: #94A3B8 !important;
         font-weight: 500;
         text-transform: uppercase;
@@ -166,7 +190,7 @@ st.markdown("""
     }
 
     .nav-label {
-        font-size: 0.75rem;
+        font-size: 0.78rem;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         font-weight: 700;
@@ -174,6 +198,7 @@ st.markdown("""
         margin: 16px 4px 10px 4px;
     }
 
+    /* ====== MENU LATERAL: BOTÕES COM LARGURA 100% UNIFORME E FUNCIONAIS ====== */
     section[data-testid="stSidebar"] div[data-testid="stRadio"] {
         width: 100% !important;
     }
@@ -187,6 +212,7 @@ st.markdown("""
     section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label div:first-child { 
         display: none !important; 
     }
+    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label[data-baseweb="radio"],
     section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label {
         background-color: #1A3620 !important;
         border: 1px solid #1A3620 !important;
@@ -196,11 +222,10 @@ st.markdown("""
         padding: 0 16px !important;
         margin: 0 !important;
         width: 100% !important;
-        min-width: 100% !important;
-        box-sizing: border-box !important;
         display: flex !important;
         align-items: center !important;
         cursor: pointer !important;
+        box-sizing: border-box !important;
         transition: all 0.2s ease-in-out !important;
     }
     section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:hover {
@@ -213,7 +238,7 @@ st.markdown("""
     }
     section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label p {
         color: #E2E8F0 !important;
-        font-size: 0.92rem !important;
+        font-size: 0.95rem !important; /* Fonte um pouco maior nos botões */
         font-weight: 600 !important;
         margin: 0 !important;
         width: 100% !important;
@@ -257,10 +282,6 @@ st.markdown("""
         padding: 22px 24px !important;
         box-shadow: 0 2px 4px rgba(19, 37, 23, 0.03) !important;
         margin-bottom: 22px !important;
-    }
-
-    div[data-testid="stDataFrame"] div {
-        font-size: 14.5px !important;
     }
 
     .kpi-container {
@@ -315,16 +336,6 @@ st.markdown("""
     .bubble-yellow { background: #FEF9C3; border: 1px solid #FEF08A; color: #B45309; }
     .bubble-red { background: #FEE2E2; border: 1px solid #FECACA; color: #DC2626; }
 
-    .destaque-verde {
-        background-color: #F0FDF4 !important;
-        border-left: 4px solid #16A34A !important;
-        border-radius: 8px !important;
-        padding: 10px 14px !important;
-        color: #14532D !important;
-        font-size: 0.86rem !important;
-        margin-bottom: 14px !important;
-    }
-
     .top-header-bar {
         display: flex;
         justify-content: space-between;
@@ -334,15 +345,15 @@ st.markdown("""
         border-bottom: 1px solid #D6E4D7;
     }
     .top-header-title h1 {
-        font-size: 1.45rem !important;
+        font-size: 1.6rem !important;
         font-weight: 800 !important;
         color: #132517 !important;
         margin: 0 !important;
         letter-spacing: -0.02em !important;
     }
     .top-header-title span {
-        font-size: 0.74rem !important;
-        font-weight: 600 !important;
+        font-size: 0.78rem !important;
+        font-weight: 700 !important;
         color: #527958 !important;
         text-transform: uppercase !important;
         letter-spacing: 0.05em !important;
@@ -361,7 +372,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. MOTOR DE LEITURA DE CONTEÚDO INTERNO & PADRONIZAÇÃO
+# 4. MOTOR DE LEITURA DE CONTEÚDO INTERNO & PADRONIZAÇÃO
 # ==============================================================================
 def normalizar_data_str(val, ano_padrao="2026"):
     if val is None or pd.isna(val):
@@ -716,7 +727,7 @@ def inspecionar_e_processar_conteudo(uploaded_file):
     raise ValueError(f"Colunas internas não reconhecidas: {list(df_amostra.columns)}")
 
 # ==============================================================================
-# 4. RENDERIZADORES DE TABELA FORMATADA (NÚMEROS EXPANDIDOS & NÍTIDOS)
+# 5. RENDERIZADORES DE TABELA HTML FORMATADA
 # ==============================================================================
 def render_reclass_table_html(df):
     rows_html = []
@@ -727,7 +738,7 @@ def render_reclass_table_html(df):
             f'<tr style="background-color: {bg}; border-bottom: 1px solid #E2E8F0; color: #1E293B; font-size: 14.5px;">'
             f'<td style="padding: 10px 12px; border-right: 1px solid #E2E8F0;">{r["Data_Postura"]}</td>'
             f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid #CBD5E1;">{r["Lote"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 600; color: {origem_color}; border-right: 1px solid #E2E8F0;">{r["Origem"]}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; color: {origem_color}; border-right: 1px solid #E2E8F0;">{r["Origem"]}</td>'
             f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid #CBD5E1;">{r["Saldo_Inicial"]:,}'.replace(",", ".") + f'</td>'
             f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Sujo"]:,}'.replace(",", ".") + f'</td>'
             f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Deformado"]:,}'.replace(",", ".") + f'</td>'
@@ -736,8 +747,8 @@ def render_reclass_table_html(df):
             f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Duas_Gemas"]:,}'.replace(",", ".") + f'</td>'
             f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Ovo_Limpo"]:,}'.replace(",", ".") + f'</td>'
             f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid #CBD5E1;">{r["Trincado"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; background-color: #F1F5F9; border-right: 1px solid #E2E8F0;">{r["Total_Destinos"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; background-color: ' + ("#FEF2F2" if r["Saldo_Final"] > 0 else "#ECFDF5") + '; color: ' + ("#991B1B" if r["Saldo_Final"] > 0 else "#065F46") + f';">{r["Saldo_Final"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: #F1F5F9; border-right: 1px solid #E2E8F0;">{r["Total_Destinos"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: ' + ("#FEF2F2" if r["Saldo_Final"] > 0 else "#ECFDF5") + '; color: ' + ("#991B1B" if r["Saldo_Final"] > 0 else "#065F46") + f';">{r["Saldo_Final"]:,}'.replace(",", ".") + f'</td>'
             f'</tr>'
         )
         rows_html.append(row_str)
@@ -768,14 +779,14 @@ def render_reclass_table_html(df):
         '<div style="overflow-x: auto; width: 100%; border-radius: 10px; border: 1px solid #CBD5E1; margin-bottom: 22px;">'
         '<table style="min-width: 1300px; width: 100%; border-collapse: collapse; text-align: center;">'
         '<thead>'
-        '<tr style="color: white; font-weight: 700; font-size: 13px;">'
+        '<tr style="color: white; font-weight: 700; font-size: 13.5px;">'
         '<th colspan="2" style="background-color: #334155; padding: 10px; border-right: 2px solid white;">IDENTIFICAÇÃO</th>'
         '<th style="background-color: #1E3A8A; padding: 10px; border-right: 2px solid white;">ORIGEM</th>'
         '<th style="background-color: #1E3A8A; padding: 10px; border-right: 2px solid white;">SALDO INI</th>'
         '<th colspan="7" style="background-color: #14532D; padding: 10px; border-right: 2px solid white;">DESTINO COMERCIAL</th>'
         '<th colspan="2" style="background-color: #475569; padding: 10px;">CONFERÊNCIA</th>'
         '</tr>'
-        '<tr style="color: white; font-weight: 600; font-size: 13.5px;">'
+        '<tr style="color: white; font-weight: 600; font-size: 14.5px;">'
         '<th style="background-color: #475569; padding: 10px;">Data Postura</th>'
         '<th style="background-color: #475569; padding: 10px; border-right: 2px solid white;">Lote</th>'
         '<th style="background-color: #2563EB; padding: 10px;">Origem</th>'
@@ -804,7 +815,7 @@ def render_descarte_table_html(df):
             f'<tr style="background-color: {bg}; border-bottom: 1px solid #FEE2E2; color: #1E293B; font-size: 14.5px;">'
             f'<td style="padding: 10px 12px; border-right: 1px solid #FEE2E2;">{r["Data_Postura"]}</td>'
             f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid #CBD5E1;">{r["Lote"]}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 700; color: #1E3A8A;">{r["Ninho Normal"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 800; color: #1E3A8A;">{r["Ninho Normal"]:,}</td>'
             f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Cama"]:,}</td>'
             f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Ninho Sujo"]:,}</td>'
             f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Deformado"]:,}</td>'
@@ -861,7 +872,7 @@ def render_descarte_table_html(df):
     return table_html
 
 # ==============================================================================
-# 5. BARRA LATERAL EXECUTIVA
+# 6. BARRA LATERAL EXECUTIVA
 # ==============================================================================
 st.sidebar.markdown("""
 <div class="brand-box">
@@ -908,7 +919,7 @@ st.sidebar.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 6. CONTROLADORES DAS TELAS
+# 7. CONTROLADORES DAS TELAS
 # ==============================================================================
 
 if tela == "📊 Dashboard Executivo & Faturamento":
@@ -980,7 +991,7 @@ if tela == "📊 Dashboard Executivo & Faturamento":
             venda_cli["Faturamento (R$)"] = venda_cli["Quantidade_Ovos"] * preco_unitario
             st.dataframe(venda_cli, use_container_width=True, hide_index=True)
         else:
-            st.info("Nenhuma venda gravada no histórico.")
+            show_info("Nenhuma venda gravada no histórico.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with c2:
@@ -990,7 +1001,7 @@ if tela == "📊 Dashboard Executivo & Faturamento":
             transf_dest = df_transf.groupby("Destino")[["Quantidade_Ovos"]].sum().reset_index()
             st.dataframe(transf_dest, use_container_width=True, hide_index=True)
         else:
-            st.info("Nenhuma transferência gravada no histórico.")
+            show_info("Nenhuma transferência gravada no histórico.")
         st.markdown('</div>', unsafe_allow_html=True)
 
 elif tela == "📥 Central de Carga de Arquivos":
@@ -1025,9 +1036,9 @@ elif tela == "📥 Central de Carga de Arquivos":
         for arq in arquivos_unificados:
             try:
                 tipo_identificado, qtd_reg = inspecionar_e_processar_conteudo(arq)
-                st.success(f"✅ Conteúdo identificado como **{tipo_identificado}** — {qtd_reg} registros sincronizados no banco!")
+                show_success(f"Conteúdo identificado como **{tipo_identificado}** — {qtd_reg} registros sincronizados no banco!")
             except Exception as e:
-                st.error(f"❌ Não foi possível identificar a estrutura interna de um dos arquivos: {e}")
+                show_error(f"Não foi possível identificar a estrutura interna de um dos arquivos: {e}")
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
@@ -1054,11 +1065,11 @@ elif tela == "📥 Central de Carga de Arquivos":
                 if tab_para_limpar == "TODAS AS TABELAS":
                     for t in ["df_reclass", "df_rec_mtech", "df_desc_mtech", "df_prod", "df_vendas", "df_transf"]:
                         DatabaseManager.limpar_tabela(t)
-                    st.success("Todas as tabelas foram zeradas no banco local.")
+                    show_success("Todas as tabelas foram zeradas no banco local.")
                     st.rerun()
                 elif tab_para_limpar != "Selecione...":
                     DatabaseManager.limpar_tabela(tab_para_limpar)
-                    st.success(f"Tabela {tab_para_limpar} limpa com sucesso!")
+                    show_success(f"Tabela {tab_para_limpar} limpa com sucesso!")
                     st.rerun()
         with c_db2:
             if os.path.exists(DB_PATH):
@@ -1090,12 +1101,12 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
     df_desc_mtech_orig = DatabaseManager.obter("df_desc_mtech")
 
     if df_r_original.empty:
-        st.warning("⚠️ Carregue a ficha de reclassificação na aba 'Central de Carga de Arquivos' para visualizar.")
+        show_warning("Carregue a ficha de reclassificação na aba 'Central de Carga de Arquivos' para visualizar.")
     else:
         st.markdown("""
-        <div style="background-color: #F0F9FF; border: 1px solid #BAE6FD; border-left: 6px solid #0284C7; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px;">
-            <h4 style="margin: 0 0 10px 0; color: #0369A1; font-size: 15px; font-weight: 700;">⚙️ Painel de Filtros (Histórico do Banco de Dados)</h4>
-            <p style="margin: 0; font-size: 13.5px; color: #0C4A6E;">A <b>Data de Transação (Processamento)</b> sincroniza os lotes auditados no MTech com a ficha física correspondente gravada no banco.</p>
+        <div style="background-color: #F0F9FF; border: 1px solid #BAE6FD; border-left: 6px solid #0284C7; border-radius: 8px; padding: 18px 22px; margin-bottom: 24px;">
+            <h4 style="margin: 0 0 10px 0; color: #0369A1; font-size: 16px; font-weight: 800;">⚙️ Painel de Filtros (Histórico do Banco de Dados)</h4>
+            <p style="margin: 0; font-size: 14.5px; color: #0C4A6E;">A <b>Data de Transação (Processamento)</b> sincroniza os lotes auditados no MTech com a ficha física correspondente gravada no banco.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1122,7 +1133,7 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
             df_r = df_r[df_r["Data_Postura"] == filtro_dt]
 
         if df_r.empty:
-            st.warning("Nenhum dado encontrado para esta combinação de filtros.")
+            show_warning("Nenhum dado encontrado para esta combinação de filtros.")
             st.stop()
 
         # 1. LANÇAMENTO DE RECLASSIFICAÇÃO
@@ -1180,7 +1191,7 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
             with tab_d2:
                 st.dataframe(df_desc_final, use_container_width=True, hide_index=True)
         else:
-            st.info("Nenhuma baixa/descarte para registrar nas abas (Comercial ou Ovos Perdidos).")
+            show_info("Nenhuma baixa/descarte para registrar nas abas (Comercial ou Ovos Perdidos).")
             
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1207,9 +1218,9 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
         st.subheader("4.1 Validação de Reclassificação (Destinos Comerciais)")
         
         if df_rec_mtech_orig.empty:
-            st.info("ℹ️ Para validar a reclassificação, solte a planilha de Reclassificação do MTech na Central de Carga.")
+            show_info("Para validar a reclassificação, solte a planilha de Reclassificação do MTech na Central de Carga.")
         elif filtro_proc == "Todos os Processamentos":
-            st.warning("⚠️ Selecione uma **Data de Transação (Processamento)** específica no painel de filtros para ativar a validação do lote contábil exato.")
+            show_warning("Selecione uma <b>Data de Transação (Processamento)</b> específica no painel de filtros para ativar a validação do lote contábil exato.")
         else:
             df_rec_m_sub = df_rec_mtech_orig.copy()
             df_rec_m_sub = df_rec_m_sub[df_rec_m_sub["Data Transação"] == filtro_proc]
@@ -1222,7 +1233,6 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
             categorias_alvo = ["Sujo", "Deformado", "Ninho Sujo", "Industrial", "Duas Gemas", "Ovo Limpo", "Trincado"]
             tot_dest_ficha = df_comercial[["Sujo", "Deformado", "Ninho_Sujo", "Industrial", "Duas_Gemas", "Ovo_Limpo", "Trincado"]].sum().sum()
             
-            # ATENÇÃO: No MTech, o que entra no comercial é DÉBITO de reclassificação!
             tot_cred_m = df_rec_m_sub[
                 (df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("D[é|e]bito", case=False, na=False)) &
                 (df_rec_m_sub["Categoria_Normalizada"].isin(categorias_alvo))
@@ -1238,10 +1248,10 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
                     </div>
                     <div>
                         <p class="kpi-title">Balanço Total de Reclassificação</p>
-                        <p class="kpi-value" style="color: {'#16A34A' if dif_reclass == 0 else '#DC2626'}; font-size: 1.35rem;">
+                        <p class="kpi-value" style="color: {'#16A34A' if dif_reclass == 0 else '#DC2626'}; font-size: 1.4rem;">
                             {'✅ 100% Validado' if dif_reclass == 0 else f'❌ Divergência: {dif_reclass:+,} ovos'}
                         </p>
-                        <p class="kpi-sub" style="color: #64748B;">
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">
                             Ficha CPO: {tot_dest_ficha:,.0f} | MTech (Entrada): {tot_cred_m:,.0f}
                         </p>
                     </div>
@@ -1250,8 +1260,8 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
                     <div class="kpi-icon-bubble bubble-teal">📋</div>
                     <div>
                         <p class="kpi-title">Transação Auditada</p>
-                        <p class="kpi-value" style="font-size: 1.25rem;">{filtro_proc}</p>
-                        <p class="kpi-sub" style="color: #64748B;">
+                        <p class="kpi-value" style="font-size: 1.3rem;">{filtro_proc}</p>
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">
                             {'Todas as posturas consolidadas' if filtro_dt == 'Todas as Datas' else f'Postura: {filtro_dt}'}
                         </p>
                     </div>
@@ -1287,11 +1297,10 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
 
             st.dataframe(pd.DataFrame(linhas_validacao_reclass), use_container_width=True, hide_index=True)
 
-            # VALIDAÇÃO DE ORIGEM (SAÍDA / CRÉDITO DO ESTOQUE)
+            # VALIDAÇÃO DE ORIGEM
             st.markdown("<hr>", unsafe_allow_html=True)
-            st.markdown("**Validação de Saída da Reclassificação (Origens MTech)**")
+            st.markdown("<h4 style='font-size: 16px;'>Validação de Saída da Reclassificação (Origens MTech)</h4>", unsafe_allow_html=True)
             
-            # Ovos que saíram do estoque na Tabela 1 e Tabela 2
             tot_saida_nn = df_r[df_r["Origem"] == "Ninho Normal"]["Total_Classificado"].sum()
             tot_saida_ns = df_r[df_r["Origem"] == "Ninho Sujo"]["Saldo_Inicial"].sum()
             tot_saida_cm = df_r[df_r["Origem"] == "Cama"]["Saldo_Inicial"].sum()
@@ -1327,9 +1336,9 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
         st.subheader("4.2 Validação de Baixas & Descartes por Tipo de Ovo")
         
         if df_desc_mtech_orig.empty:
-            st.info("ℹ️ Para validar os descartes, solte a planilha de Descarte do MTech na Central de Carga.")
+            show_info("Para validar os descartes, solte a planilha de Descarte do MTech na Central de Carga.")
         elif filtro_proc == "Todos os Processamentos":
-            st.warning("⚠️ Selecione uma **Data de Transação (Processamento)** específica no painel de filtros para ativar a validação do lote contábil exato.")
+            show_warning("Selecione uma <b>Data de Transação (Processamento)</b> específica no painel de filtros para ativar a validação do lote contábil exato.")
         else:
             df_desc_m_sub = df_desc_mtech_orig.copy()
             df_desc_m_sub = df_desc_m_sub[df_desc_m_sub["Data Transação"] == filtro_proc]
@@ -1361,10 +1370,10 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
                     </div>
                     <div>
                         <p class="kpi-title">Balanço Total de Descartes</p>
-                        <p class="kpi-value" style="color: {'#16A34A' if dif_desc_geral == 0 else '#DC2626'}; font-size: 1.35rem;">
+                        <p class="kpi-value" style="color: {'#16A34A' if dif_desc_geral == 0 else '#DC2626'}; font-size: 1.4rem;">
                             {'✅ 100% Validado' if dif_desc_geral == 0 else f'❌ Divergência: {dif_desc_geral:+,} ovos'}
                         </p>
-                        <p class="kpi-sub" style="color: #64748B;">
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">
                             Total Esperado: {tot_esperado_geral:,.0f} | MTech: {tot_desc_m:,.0f}
                         </p>
                     </div>
@@ -1373,22 +1382,22 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
                     <div class="kpi-icon-bubble bubble-yellow">🥚</div>
                     <div>
                         <p class="kpi-title">Descartes do CPO (Fichas)</p>
-                        <p class="kpi-value" style="font-size: 1.25rem;">{tot_desc_esperado_cpo:,.0f}</p>
-                        <p class="kpi-sub" style="color: #64748B;">NN Perdidos + Avarias</p>
+                        <p class="kpi-value" style="font-size: 1.3rem;">{tot_desc_esperado_cpo:,.0f}</p>
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">NN Perdidos + Avarias</p>
                     </div>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-icon-bubble bubble-teal">🚜</div>
                     <div>
                         <p class="kpi-title">Descartes Galpão (Produção)</p>
-                        <p class="kpi-value" style="font-size: 1.25rem;">{tot_desc_galpao:,.0f}</p>
-                        <p class="kpi-sub" style="color: #64748B;">Baixas Diretas na Coleta</p>
+                        <p class="kpi-value" style="font-size: 1.3rem;">{tot_desc_galpao:,.0f}</p>
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Baixas Diretas na Coleta</p>
                     </div>
                 </div>
             </div>
             """.replace(",", "."), unsafe_allow_html=True)
 
-            st.markdown("**Comparativo Detalhado por Tipo de Ovo (Descartes & Perdas)**")
+            st.markdown("<h4 style='font-size: 16px;'>Comparativo Detalhado por Tipo de Ovo (Descartes & Perdas)</h4>", unsafe_allow_html=True)
             
             cats_descartes = [
                 ("Perdido (NN) / Ninho Normal", "Ninho Normal", df_desc_final["Ninho Normal"].sum() if "Ninho Normal" in df_desc_final.columns else 0),
@@ -1452,12 +1461,12 @@ elif tela == "🚚 Validação de Expedição (Vendas & Transferências)":
     tab1, tab2 = st.tabs(["Romaneios de Venda Externa", "Transferências OBI"])
     with tab1:
         if df_vendas.empty:
-            st.warning("Nenhum romaneio de venda gravado no banco.")
+            show_warning("Nenhum romaneio de venda gravado no banco.")
         else:
             st.dataframe(df_vendas, use_container_width=True, hide_index=True)
     with tab2:
         if df_transf.empty:
-            st.warning("Nenhum romaneio de transferência gravado no banco.")
+            show_warning("Nenhum romaneio de transferência gravado no banco.")
         else:
             st.dataframe(df_transf, use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1474,7 +1483,7 @@ elif tela == "🏭 Produção Diária (MTech)":
 
     df_p = DatabaseManager.obter("df_prod")
     if df_p.empty:
-        st.warning("Nenhum dado de produção diária gravado no banco.")
+        show_warning("Nenhum dado de produção diária gravado no banco.")
     else:
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
         c_f1, c_f2 = st.columns(2)
@@ -1507,7 +1516,7 @@ elif tela == "🗑️ Descartes & Trincados":
 
     df_reclass = DatabaseManager.obter("df_reclass")
     if df_reclass.empty:
-        st.warning("Carregue a planilha de reclassificação na Central de Carga para visualizar.")
+        show_warning("Carregue a planilha de reclassificação na Central de Carga para visualizar.")
     else:
         df_desc = df_reclass[(df_reclass["Origem"] == "Ovos Perdidos (Aba)") | (df_reclass["Microtrincado"] > 0) | (df_reclass["P_NN"] > 0)].copy()
         tot_micro = df_reclass['Microtrincado'].sum()
@@ -1522,7 +1531,7 @@ elif tela == "🗑️ Descartes & Trincados":
                 <div>
                     <p class="kpi-title">Microtrincados (05)</p>
                     <p class="kpi-value">{tot_micro:,.0f}</p>
-                    <p class="kpi-sub" style="color: #D97706;">Passível de Comercialização</p>
+                    <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Passível de Comercialização</p>
                 </div>
             </div>
             <div class="kpi-card">
@@ -1530,7 +1539,7 @@ elif tela == "🗑️ Descartes & Trincados":
                 <div>
                     <p class="kpi-title">Quebras Físicas / Perdidos (Inclui NN)</p>
                     <p class="kpi-value" style="color: #DC2626;">{tot_quebras:,.0f}</p>
-                    <p class="kpi-sub" style="color: #DC2626;">Perda Total Consolidada</p>
+                    <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Perda Total Consolidada</p>
                 </div>
             </div>
         </div>
@@ -1543,5 +1552,5 @@ elif tela == "🗑️ Descartes & Trincados":
             df_desc_resumo = df_desc.groupby(["Data_Postura", "Lote"]).sum(numeric_only=True).reset_index()
             st.dataframe(df_desc_resumo, use_container_width=True, hide_index=True)
         else:
-            st.info("Nenhuma avaria registrada.")
+            show_info("Nenhuma avaria registrada.")
         st.markdown('</div>', unsafe_allow_html=True)
