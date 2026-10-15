@@ -1284,4 +1284,4 @@ elif tela == "🗑️ Descartes & Trincados":
         st.subheader("Detalhamento por Data e Lote")
         if not df_desc.empty: st.dataframe(df_desc.groupby(["Data_Postura", "Lote"]).sum(numeric_only=True).reset_index(), use_container_width=True, hide_index=True)
         else: show_info("Nenhuma avaria registrada.")
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True) 
