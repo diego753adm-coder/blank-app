@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 # ==============================================================================
-# 1. CAMADA DE BANCO DE DADOS LOCAL (SQLITE - PRONTO PARA MIGRAÇÃO FUTURA)
+# 1. CAMADA DE BANCO DE DADOS LOCAL (SQLITE)
 # ==============================================================================
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "historico_ovos_117.db")
 
@@ -79,7 +79,7 @@ class DatabaseManager:
 DatabaseManager.inicializar()
 
 # ==============================================================================
-# 2. SISTEMA DE AVISOS BLINDADOS CONTRA MUDANÇAS DE TEMA (DARK/LIGHT MODE)
+# 2. SISTEMA DE AVISOS BLINDADOS
 # ==============================================================================
 def show_warning(msg):
     st.markdown(f'<div style="background-color: #FFFBEB; border: 1px solid #FEF3C7; border-left: 6px solid #F59E0B; padding: 14px 18px; border-radius: 8px; color: #92400E; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">⚠️ &nbsp; {msg}</div>', unsafe_allow_html=True)
@@ -94,14 +94,9 @@ def show_error(msg):
     st.markdown(f'<div style="background-color: #FEF2F2; border: 1px solid #FEE2E2; border-left: 6px solid #EF4444; padding: 14px 18px; border-radius: 8px; color: #991B1B; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">❌ &nbsp; {msg}</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. CONFIGURAÇÃO GERAL E ESTILO VISUAL SAAS (RESTAURADO E RESPONSIVO)
+# 3. ESTILO VISUAL E MENU LATERAL (CONGELADO E INTOCÁVEL)
 # ==============================================================================
-st.set_page_config(
-    page_title="Hub Operacional de Ovos • Balsas 117",
-    page_icon="🥚",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Hub Operacional de Ovos", page_icon="🥚", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
@@ -109,20 +104,13 @@ st.markdown("""
 
     html, body, [class*="css"], .stApp {
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        font-size: 14.5px !important;
-        background-color: #EDF5EE !important;
-        color: #1F2937 !important;
+        font-size: 15px !important;
     }
 
-    /* TOPO LIMPO */
-    header[data-testid="stHeader"] {
-        background-color: transparent !important;
-        box-shadow: none !important;
-    }
+    header[data-testid="stHeader"] { background-color: transparent !important; box-shadow: none !important; }
 
-    /* RESPONSIVIDADE TOTAL: Ocupa 100% da largura ao recolher a barra */
     .block-container {
-        padding-top: 1rem !important; 
+        padding-top: 1.5rem !important; 
         padding-bottom: 3rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
@@ -130,311 +118,242 @@ st.markdown("""
         width: 100% !important;
     }
 
-    /* BARRA LATERAL COM TRANSIÇÃO NATIVA FLUIDA */
+    .stSelectbox label p, .stNumberInput label p, .stFileUploader label p {
+        font-size: 16px !important; font-weight: 700 !important; color: var(--text-color) !important;
+    }
+    div[data-baseweb="select"] span, input { font-size: 15px !important; }
+
+    [data-testid="stSidebarResizer"] { display: none !important; }
+    
     section[data-testid="stSidebar"] {
+        min-width: 310px !important;
+        max-width: 310px !important;
         background-color: #132517 !important;
         border-right: 1px solid #0E1B11 !important;
     }
-    section[data-testid="stSidebar"] * {
-        color: #E2E8F0 !important;
-    }
+    section[data-testid="stSidebar"] * { color: #E2E8F0 !important; }
     
-    /* BOTÃO DE RECUO SEMPRE VISÍVEL */
-    [data-testid="stSidebarCollapseButton"], [data-testid="collapsedControl"] {
-        opacity: 1 !important;
-        visibility: visible !important;
-        color: #84A98C !important;
-        background-color: transparent !important;
-    }
-    [data-testid="stSidebarCollapseButton"] svg {
-        stroke: #84A98C !important;
-        fill: #84A98C !important;
-    }
-
-    /* CAIXA DA MARCA (ALINHADA AO TOPO) */
     .brand-box {
-        background: rgba(255, 255, 255, 0.05);
+        background: #132517;
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
-        padding: 12px 14px;
+        padding: 14px 16px;
         margin-top: -20px !important;
-        margin-bottom: 20px;
+        margin-bottom: 25px;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 14px;
     }
     .brand-icon {
-        font-size: 1.4rem;
-        background: #25442A;
-        width: 38px;
-        height: 38px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        border: 1px solid #37643E;
+        font-size: 1.6rem; background: #25442A; width: 44px; height: 44px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 8px; border: 1px solid #37643E;
     }
-    .brand-title {
-        font-size: 1rem;
-        font-weight: 800;
-        color: #FFFFFF !important;
-        margin: 0;
-        letter-spacing: -0.01em;
-    }
-    .brand-sub {
-        font-size: 0.75rem;
-        color: #94A3B8 !important;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
+    .brand-title { font-size: 1.05rem; font-weight: 800; color: #FFFFFF !important; margin: 0; }
+    .brand-sub { font-size: 0.78rem; color: #94A3B8 !important; font-weight: 600; text-transform: uppercase; }
 
     .nav-label {
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        font-weight: 700;
-        color: #84A98C !important;
-        margin: 16px 4px 10px 4px;
+        font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800;
+        color: #84A98C !important; margin: 18px 4px 12px 4px;
     }
 
-    /* ====== MENU LATERAL: BOTÕES COM LARGURA 100% UNIFORME E FUNCIONAIS ====== */
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] {
-        width: 100% !important;
-    }
+    section[data-testid="stSidebar"] div[data-testid="stRadio"] { width: 100% !important; }
     section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] {
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
-        width: 100% !important;
-        gap: 10px !important;
+        display: flex !important; flex-direction: column !important; align-items: stretch !important; width: 100% !important; gap: 10px !important;
     }
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label div:first-child { 
-        display: none !important; 
-    }
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label[data-baseweb="radio"],
+    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label div:first-child { display: none !important; }
     section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label {
-        background-color: #1A3620 !important;
-        border: 1px solid #1A3620 !important;
-        border-radius: 8px !important;
-        min-height: 48px !important;
-        height: 48px !important;
-        padding: 0 16px !important;
-        margin: 0 !important;
-        width: 100% !important;
-        display: flex !important;
-        align-items: center !important;
-        cursor: pointer !important;
-        box-sizing: border-box !important;
-        transition: all 0.2s ease-in-out !important;
+        background-color: #1A3620 !important; border: 1px solid #1A3620 !important; border-radius: 8px !important;
+        min-height: 48px !important; height: 48px !important; padding: 0 16px !important; margin: 0 !important;
+        width: 100% !important; display: flex !important; align-items: center !important; cursor: pointer !important;
     }
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:hover {
-        background-color: #25442A !important;
-        border: 1px solid #4ADE80 !important;
-    }
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) {
-        background-color: #204428 !important;
-        border-left: 5px solid #4ADE80 !important;
-    }
+    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:hover { background-color: #25442A !important; border: 1px solid #4ADE80 !important; }
+    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) { background-color: #204428 !important; border-left: 5px solid #4ADE80 !important; }
     section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label p {
-        color: #E2E8F0 !important;
-        font-size: 0.95rem !important; /* Fonte um pouco maior nos botões */
-        font-weight: 600 !important;
-        margin: 0 !important;
-        width: 100% !important;
+        color: #E2E8F0 !important; font-size: 0.95rem !important; font-weight: 600 !important; margin: 0 !important; width: 100% !important;
     }
 
-    section[data-testid="stSidebar"] input {
-        background-color: #1B3621 !important;
-        color: #FFFFFF !important;
-        border: 1px solid #2B5433 !important;
-        border-radius: 6px !important;
-        padding: 10px !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
+    section[data-testid="stSidebar"] input { background-color: #1B3621 !important; color: #FFFFFF !important; border: 1px solid #2B5433 !important; border-radius: 6px !important; padding: 10px !important; }
 
-    .cotacao-sidebar-card {
-        background: rgba(245, 158, 11, 0.08);
-        border: 1px solid rgba(245, 158, 11, 0.35);
-        border-radius: 10px;
-        padding: 14px 16px;
-        margin-top: 18px;
-    }
-    .cotacao-sidebar-tag {
-        font-size: 0.70rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        color: #FCD34D !important;
-        letter-spacing: 0.04em;
-    }
-    .cotacao-sidebar-val {
-        font-size: 1.35rem;
-        font-weight: 800;
-        color: #FBBF24 !important;
-        margin-top: 4px;
-    }
+    .cotacao-sidebar-card { background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 10px; padding: 14px 16px; margin-top: 18px; }
+    .cotacao-sidebar-tag { font-size: 0.70rem; font-weight: 700; text-transform: uppercase; color: #FCD34D !important; }
+    .cotacao-sidebar-val { font-size: 1.35rem; font-weight: 800; color: #FBBF24 !important; margin-top: 4px; }
 
-    .saas-panel {
-        background-color: #FFFFFF !important;
-        border: 1px solid #D6E4D7 !important;
-        border-radius: 12px !important;
-        padding: 22px 24px !important;
-        box-shadow: 0 2px 4px rgba(19, 37, 23, 0.03) !important;
-        margin-bottom: 22px !important;
-    }
+    .saas-panel { background-color: var(--background-color) !important; border: 1px solid var(--secondary-background-color) !important; border-radius: 12px !important; padding: 24px 26px !important; box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important; margin-bottom: 24px !important; }
 
-    .kpi-container {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 16px;
-        margin-bottom: 22px;
-    }
-    .kpi-card {
-        background: #FFFFFF;
-        border: 1px solid #D6E4D7;
-        border-radius: 12px;
-        padding: 16px 18px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        display: flex;
-        align-items: center;
-        gap: 16px;
-    }
-    .kpi-icon-bubble {
-        width: 48px;
-        height: 48px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.4rem;
-        flex-shrink: 0;
-    }
-    .kpi-title {
-        font-size: 0.74rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        color: #64748B;
-        letter-spacing: 0.03em;
-        margin: 0;
-    }
-    .kpi-value {
-        font-size: 1.45rem;
-        font-weight: 800;
-        color: #0F172A;
-        letter-spacing: -0.02em;
-        margin: 2px 0 0 0;
-    }
-    .kpi-sub {
-        font-size: 0.76rem;
-        font-weight: 600;
-        margin: 2px 0 0 0;
-    }
+    div[data-testid="stDataFrame"] div { font-size: 15px !important; }
+
+    .kpi-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 24px; width: 100%; }
+    .kpi-card { background: var(--background-color); border: 1px solid var(--secondary-background-color); border-radius: 12px; padding: 18px 20px; box-shadow: 0 3px 5px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px; width: 100%; box-sizing: border-box; }
+    .kpi-icon-bubble { width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
+    .kpi-title { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-color); opacity: 0.7; margin: 0; }
+    .kpi-value { font-size: 1.6rem; font-weight: 800; color: var(--text-color); margin: 2px 0 0 0; }
+    .kpi-sub { font-size: 0.82rem; font-weight: 600; margin: 4px 0 0 0; }
 
     .bubble-green { background: #E8F5E9; border: 1px solid #C8E6C9; color: #2E7D32; }
     .bubble-teal { background: #E0F2F1; border: 1px solid #B2DFDB; color: #00796B; }
     .bubble-yellow { background: #FEF9C3; border: 1px solid #FEF08A; color: #B45309; }
     .bubble-red { background: #FEE2E2; border: 1px solid #FECACA; color: #DC2626; }
 
-    .top-header-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 18px;
-        padding-bottom: 12px;
-        border-bottom: 1px solid #D6E4D7;
-    }
-    .top-header-title h1 {
-        font-size: 1.6rem !important;
-        font-weight: 800 !important;
-        color: #132517 !important;
-        margin: 0 !important;
-        letter-spacing: -0.02em !important;
-    }
-    .top-header-title span {
-        font-size: 0.78rem !important;
-        font-weight: 700 !important;
-        color: #527958 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.05em !important;
-    }
-    .top-status-badge {
-        background: #FFFFFF;
-        border: 1px solid #CBD5E1;
-        border-radius: 20px;
-        padding: 5px 12px;
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: #15803D;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    }
+    .top-header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; padding-bottom: 16px; border-bottom: 2px solid var(--secondary-background-color); }
+    .top-header-title h1 { font-size: 1.7rem !important; font-weight: 800 !important; color: var(--text-color) !important; margin: 0 !important; }
+    .top-header-title span { font-size: 0.85rem !important; font-weight: 700 !important; color: #527958 !important; text-transform: uppercase !important; }
     </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 4. MOTOR DE LEITURA DE CONTEÚDO INTERNO & PADRONIZAÇÃO
+# 4. MOTOR DE LEITURA (COM AGRUPAMENTO DE LOTES REPETIDOS)
 # ==============================================================================
 def normalizar_data_str(val, ano_padrao="2026"):
-    if val is None or pd.isna(val):
-        return ""
-    if isinstance(val, (pd.Timestamp, datetime)):
-        return val.strftime("%d/%m/%Y")
-    
+    if val is None or pd.isna(val): return ""
+    if isinstance(val, (pd.Timestamp, datetime)): return val.strftime("%d/%m/%Y")
     s = str(val).strip().lower()
     m_full = re.match(r'^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$', s)
     if m_full:
         d, m, y = m_full.groups()
         if len(y) == 2: y = "20" + y
         return f"{int(d):02d}/{int(m):02d}/{y}"
-        
-    meses = {
-        "jan": "01", "fev": "02", "mar": "03", "abr": "04", "mai": "05", "jun": "06",
-        "jul": "07", "ago": "08", "set": "09", "out": "10", "nov": "11", "dez": "12"
-    }
+    meses = {"jan": "01", "fev": "02", "mar": "03", "abr": "04", "mai": "05", "jun": "06", "jul": "07", "ago": "08", "set": "09", "out": "10", "nov": "11", "dez": "12"}
     for mes_txt, mes_num in meses.items():
         if mes_txt in s:
             dia_match = re.search(r'\b(\d{1,2})\b', s)
-            if dia_match:
-                dia = int(dia_match.group(1))
-                return f"{dia:02d}/{mes_num}/{ano_padrao}"
+            if dia_match: return f"{int(dia_match.group(1)):02d}/{mes_num}/{ano_padrao}"
     try:
         dt = pd.to_datetime(s, dayfirst=True)
         return dt.strftime("%d/%m/%Y")
-    except Exception:
-        return str(val).strip()
+    except Exception: return str(val).strip()
 
 def mapear_categoria_mtech(texto):
-    if not texto or pd.isna(texto):
-        return "Outros"
-    
+    """
+    Categorização estrita do MTech por nomes completos e siglas operacionais:
+    - NN (estrito) / NINHO NORMAL -> Ninho Normal (somente ovos classificados)
+    - DG / DG GJA / DUAS GEMAS -> Duas Gemas
+    - DF / DF GJA / DEFORMADO -> Deformado
+    - TR / TR GJA / TRINCADO / MICRO -> Trincado
+    - ID / ID GJA / INDUSTRIAL -> Industrial
+    - SJ / SJ GJA / SUJO / SUJO GRANJA -> Sujo
+    - NS / NS GJA / NINHO SUJO -> Ninho Sujo
+    - CM / CM GJA / CAMA -> Cama
+    - LP / LP GJA / LIMPO / OVO LIMPO -> Ovo Limpo
+    - PR / PERDIDO / QUEBRA -> Perda Galpão (descarte de coleta direta)
+    """
+    if not texto or pd.isna(texto): return "Outros"
     t = str(texto).upper().strip()
-    numeros = re.findall(r'\b0?([24568]|12|13)\b', t)
-    
-    if "DEFORMADO" in t or "DF" in t.split() or "12" in numeros:
-        return "Deformado"
-    if any(x in t for x in ["DUAS GEMAS", "DUAS_GEMAS", "2 GEMAS", "GEMA"]) or "DG" in t.split() or "04" in numeros or "4" in numeros:
+
+    # 1. Duas Gemas
+    if "DUAS GEMAS" in t or re.search(r'\bDG\b', t) or t.startswith("DG"):
         return "Duas Gemas"
-    if any(x in t for x in ["TRINCADO", "MICRO", "TRINCA"]) or "TR" in t.split() or "05" in numeros or "5" in numeros:
+
+    # 2. Deformado
+    if "DEFORMADO" in t or re.search(r'\bDF\b', t) or t.startswith("DF"):
+        return "Deformado"
+
+    # 3. Trincado e Microtrincado
+    if "TRINCADO" in t or "MICRO" in t or re.search(r'\bTR\b', t) or t.startswith("TR"):
         return "Trincado"
-    if "INDUSTRIAL" in t or "IND" in t.split() or "ID" in t.split() or "08" in numeros or "8" in numeros:
+
+    # 4. Industrial
+    if "INDUSTRIAL" in t or re.search(r'\bID\b', t) or t.startswith("ID"):
         return "Industrial"
-    if "LIMPO" in t or "LP" in t.split() or "13" in numeros:
-        return "Ovo Limpo"
-    if "NINHO SUJO" in t or "N.SUJO" in t or "NS" in t.split():
+
+    # 5. Ninho Sujo (prioritário antes de Sujo comum)
+    if "NINHO SUJO" in t or re.search(r'\bNS\b', t) or t.startswith("NS"):
         return "Ninho Sujo"
-    if "NINHO NORMAL" in t or "N.NORMAL" in t or "NN" in t.split():
-        return "Ninho Normal"
-    if "CAMA" in t or "CM" in t.split():
-        return "Cama"
-    if "SUJO" in t or "SJ" in t.split() or "06" in numeros or "6" in numeros or "02" in numeros or "2" in numeros:
+
+    # 6. Sujo / Sujo Granja
+    if "SUJO" in t or re.search(r'\bSJ\b', t) or t.startswith("SJ"):
         return "Sujo"
-        
+
+    # 7. Cama
+    if "CAMA" in t or re.search(r'\bCM\b', t) or t.startswith("CM"):
+        return "Cama"
+
+    # 8. Ninho Normal (Exclusivo para sigla NN e texto explícito)
+    if t == "NN" or re.search(r'\bNN\b', t) or "NINHO NORMAL" in t:
+        return "Ninho Normal"
+
+    # 9. Ovo Limpo
+    if "LIMPO" in t or re.search(r'\bLP\b', t) or t.startswith("LP"):
+        return "Ovo Limpo"
+
+    # 10. Perda / Quebra de Coleta no Galpão (PR)
+    if "PERDIDO" in t or "QUEBRA" in t or t == "PR" or re.search(r'\bPR\b', t) or t.startswith("PR"):
+        return "Perda Galpão"
+
     return "Outros"
 
 def safe_int(val):
     if val is None or val == "": return 0
     try: return int(float(val))
     except (ValueError, TypeError): return 0
+
+def parse_reclassificacao_cpo(file_bytes):
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    ws_name = next((s for s in wb.sheetnames if "classifica" in s.lower()), wb.sheetnames[0])
+    ws = wb[ws_name]
+    
+    data_proc = normalizar_data_str(ws["C2"].value)
+    resp = ws["G2"].value or ws["H2"].value or "Não informado"
+    linhas = []
+    secao_atual = "NN"
+
+    for r in range(4, ws.max_row + 1):
+        col_a = ws.cell(r, 1).value
+        col_b = ws.cell(r, 2).value
+
+        if col_a and "LOTES VELHOS" in str(col_a).upper(): secao_atual = "LOTES_VELHOS"; continue
+        if str(col_a).strip().upper() in ["DATA POSTURA", "DATA PRODUÇÃO", "TOTAL =", "TOTAL"] or str(col_b).strip().upper() in ["LOTE", "LOTE:"]: continue
+
+        if col_a is not None and col_b is not None:
+            try: dt_post = normalizar_data_str(col_a); lote_num = int(float(col_b))
+            except Exception: continue
+
+            base_dict = {"Data_Processamento": data_proc, "Data_Postura": dt_post, "Lote": str(lote_num), "Responsavel": str(resp), "P_NN": 0, "P_Cama": 0, "P_NS": 0, "P_Def": 0, "P_Sujo": 0, "P_Ind": 0, "P_DG": 0, "P_Trinc": 0}
+
+            if secao_atual == "NN":
+                saldo_ini = safe_int(ws.cell(r, 3).value)
+                if saldo_ini > 0:
+                    df_val = safe_int(ws.cell(r, 4).value); ns_val = safe_int(ws.cell(r, 5).value)
+                    id_val = safe_int(ws.cell(r, 6).value); dg_val = safe_int(ws.cell(r, 7).value)
+                    sj_val = safe_int(ws.cell(r, 8).value); lp_val = safe_int(ws.cell(r, 9).value)
+                    micro = safe_int(ws.cell(r, 10).value); trinc = safe_int(ws.cell(r, 11).value)
+                    tot_trinc = safe_int(ws.cell(r, 12).value) or (micro + trinc)
+                    perd_nn = safe_int(ws.cell(r, 13).value)
+                    tot_destinos = df_val + ns_val + id_val + dg_val + sj_val + lp_val + tot_trinc
+                    tot_class = safe_int(ws.cell(r, 14).value) or (tot_destinos + perd_nn)
+                    saldo_fim = safe_int(ws.cell(r, 15).value) or (saldo_ini - tot_class)
+
+                    nn_dict = base_dict.copy()
+                    nn_dict.update({"Origem": "Ninho Normal", "Saldo_Inicial": saldo_ini, "Sujo": sj_val, "Deformado": df_val, "Ninho_Sujo": ns_val, "Industrial": id_val, "Duas_Gemas": dg_val, "Ovo_Limpo": lp_val, "Trincado": tot_trinc, "Microtrincado": micro, "Total_Destinos": tot_destinos, "Total_Classificado": tot_class, "Saldo_Final": saldo_fim, "P_NN": perd_nn})
+                    linhas.append(nn_dict)
+
+            elif secao_atual == "LOTES_VELHOS":
+                ns_ini = safe_int(ws.cell(r, 3).value); cm_ini = safe_int(ws.cell(r, 4).value)
+                if ns_ini > 0:
+                    ns_dict = base_dict.copy(); ns_dict.update({"Origem": "Ninho Sujo", "Saldo_Inicial": ns_ini, "Sujo": ns_ini, "Deformado": 0, "Ninho_Sujo": 0, "Industrial": 0, "Duas_Gemas": 0, "Ovo_Limpo": 0, "Trincado": 0, "Microtrincado": 0, "Total_Destinos": ns_ini, "Total_Classificado": ns_ini, "Saldo_Final": 0})
+                    linhas.append(ns_dict)
+                if cm_ini > 0:
+                    cm_dict = base_dict.copy(); cm_dict.update({"Origem": "Cama", "Saldo_Inicial": cm_ini, "Sujo": cm_ini, "Deformado": 0, "Ninho_Sujo": 0, "Industrial": 0, "Duas_Gemas": 0, "Ovo_Limpo": 0, "Trincado": 0, "Microtrincado": 0, "Total_Destinos": cm_ini, "Total_Classificado": cm_ini, "Saldo_Final": 0})
+                    linhas.append(cm_dict)
+
+    aba_perdidos = next((s for s in wb.sheetnames if "perdido" in s.lower() or "quebra" in s.lower()), None)
+    if aba_perdidos:
+        ws_p = wb[aba_perdidos]
+        for r in range(2, ws_p.max_row + 1):
+            val_a = ws_p.cell(r, 1).value
+            if not val_a: continue
+            str_a = str(val_a).strip().upper()
+            if str_a in ["DATA POSTURA", "DATA DE POSTURA", "TOTAL", "TOTAL =", "DATA"]: continue
+            try:
+                dt_post = normalizar_data_str(val_a); val_b = ws_p.cell(r, 2).value
+                lote_num = str(int(float(val_b))) if val_b and str(val_b).replace('.', '').replace(',', '').isnumeric() else "-"
+                v_nn = safe_int(ws_p.cell(r, 3).value); v_cama = safe_int(ws_p.cell(r, 4).value); v_ns = safe_int(ws_p.cell(r, 5).value)
+                v_def = safe_int(ws_p.cell(r, 6).value); v_sujo = safe_int(ws_p.cell(r, 7).value); v_ind = safe_int(ws_p.cell(r, 8).value); v_dg = safe_int(ws_p.cell(r, 9).value); v_trinc = safe_int(ws_p.cell(r, 10).value)
+                if (v_nn + v_cama + v_ns + v_def + v_sujo + v_ind + v_dg + v_trinc) > 0:
+                    linhas.append({"Data_Processamento": data_proc, "Data_Postura": dt_post, "Lote": lote_num, "Origem": "Ovos Perdidos (Aba)", "Saldo_Inicial": 0, "Sujo": 0, "Deformado": 0, "Ninho_Sujo": 0, "Industrial": 0, "Duas_Gemas": 0, "Ovo_Limpo": 0, "Trincado": 0, "Microtrincado": 0, "Total_Destinos": 0, "Total_Classificado": 0, "Saldo_Final": 0, "Responsavel": str(resp), "P_NN": v_nn, "P_Cama": v_cama, "P_NS": v_ns, "P_Def": v_def, "P_Sujo": v_sujo, "P_Ind": v_ind, "P_DG": v_dg, "P_Trinc": v_trinc})
+            except Exception: pass
+
+    return pd.DataFrame(linhas)
 
 def parse_producao_erp(file_bytes):
     df = pd.read_excel(io.BytesIO(file_bytes))
@@ -452,132 +371,56 @@ def parse_producao_erp(file_bytes):
     df["Nome Produto"] = df[prod_col].astype(str)
     df["Ovos"] = pd.to_numeric(df[ovos_col], errors="coerce").fillna(0).astype(int)
     df["Data Produção"] = df[dt_col].apply(normalizar_data_str)
+    
+    cols_agrupar = ["Nome Fazenda", "Nº Lote", "Nome Produto", "Data Produção"]
+    df = df.groupby(cols_agrupar, dropna=False, as_index=False)["Ovos"].sum()
     return df
 
-def parse_reclassificacao_cpo(file_bytes):
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-    ws_name = next((s for s in wb.sheetnames if "classifica" in s.lower()), wb.sheetnames[0])
-    ws = wb[ws_name]
+def parse_reclassificacao_mtech(file_bytes):
+    df = pd.read_excel(io.BytesIO(file_bytes))
+    df.columns = [str(c).strip() for c in df.columns]
     
-    data_proc_val = ws["C2"].value
-    data_proc = normalizar_data_str(data_proc_val)
-    resp = ws["G2"].value or ws["H2"].value or "Não informado"
+    lote_col = next((c for c in df.columns if "LOTE" in c.upper()), "Nº Lote")
+    nome_prod_col = next((c for c in df.columns if "NOME PRODUTO" in c.upper() or "PRODUTO" in c.upper()), "Nome Produto")
+    cod_trans_col = next((c for c in df.columns if "CÓD TRANS" in c.upper() or "COD TRANS" in c.upper()), "Cód Trans Ovo")
+    ovos_col = next((c for c in df.columns if "OVO" in c.upper() and "TRANS" not in c.upper() and "COD" not in c.upper() and "CÓD" not in c.upper()), "Ovos")
+    prod_dt_col = next((c for c in df.columns if "DATA PRODU" in c.upper() or "DATA POSTURA" in c.upper() or ("PRODU" in c.upper() and "DATA" in c.upper())), "Data Produção")
+    trans_dt_col = next((c for c in df.columns if ("DATA" in c.upper() and "TRANS" in c.upper()) or ("DATA" in c.upper() and "MOVIM" in c.upper())), "Data Transação")
 
-    linhas = []
-    secao_atual = "NN"
+    df = df.dropna(subset=[lote_col, ovos_col])
+    
+    df["Nº Lote"] = df[lote_col].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
+    df["Ovos"] = pd.to_numeric(df[ovos_col], errors='coerce').fillna(0).astype(int)
+    df["Nome Produto"] = df[nome_prod_col].astype(str) if nome_prod_col in df.columns else ""
+    df["Cód Trans Ovo"] = df[cod_trans_col].astype(str) if cod_trans_col in df.columns else ""
+    df["Data Produção"] = df[prod_dt_col].apply(normalizar_data_str) if prod_dt_col in df.columns else ""
+    df["Data Transação"] = df[trans_dt_col].apply(normalizar_data_str) if trans_dt_col in df.columns else ""
+    
+    cols_agrupar = ["Nº Lote", "Nome Produto", "Cód Trans Ovo", "Data Produção", "Data Transação"]
+    df = df.groupby(cols_agrupar, dropna=False, as_index=False)["Ovos"].sum()
+    return df
 
-    for r in range(4, ws.max_row + 1):
-        col_a = ws.cell(r, 1).value
-        col_b = ws.cell(r, 2).value
+def parse_descarte_mtech(file_bytes):
+    df = pd.read_excel(io.BytesIO(file_bytes))
+    df.columns = [str(c).strip() for c in df.columns]
+    
+    lote_col = next((c for c in df.columns if "LOTE" in c.upper()), "Nº Lote")
+    prod_col = next((c for c in df.columns if "PRODUTO" in c.upper() or "ITEM" in c.upper() or "DESCR" in c.upper()), "Produto")
+    ovos_col = next((c for c in df.columns if "OVO" in c.upper() and "TRANS" not in c.upper() and "COD" not in c.upper() and "CÓD" not in c.upper()), "Ovos")
+    prod_dt_col = next((c for c in df.columns if "DATA PRODU" in c.upper() or "DATA POSTURA" in c.upper() or ("PRODU" in c.upper() and "DATA" in c.upper())), "Data Produção")
+    trans_dt_col = next((c for c in df.columns if ("DATA" in c.upper() and "TRANS" in c.upper()) or ("DATA" in c.upper() and "MOVIM" in c.upper())), "Data Transação")
 
-        if col_a and "LOTES VELHOS" in str(col_a).upper():
-            secao_atual = "LOTES_VELHOS"
-            continue
-
-        if str(col_a).strip().upper() in ["DATA POSTURA", "DATA PRODUÇÃO", "TOTAL =", "TOTAL"] or str(col_b).strip().upper() in ["LOTE", "LOTE:"]:
-            continue
-
-        if col_a is not None and col_b is not None:
-            try:
-                dt_post = normalizar_data_str(col_a)
-                lote_num = int(float(col_b))
-            except Exception:
-                continue
-
-            base_dict = {
-                "Data_Processamento": data_proc,
-                "Data_Postura": dt_post, "Lote": str(lote_num), "Responsavel": str(resp),
-                "P_NN": 0, "P_Cama": 0, "P_NS": 0, "P_Def": 0, "P_Sujo": 0, "P_Ind": 0, "P_DG": 0, "P_Trinc": 0
-            }
-
-            if secao_atual == "NN":
-                saldo_ini = safe_int(ws.cell(r, 3).value)
-                if saldo_ini > 0:
-                    df_val = safe_int(ws.cell(r, 4).value)
-                    ns_val = safe_int(ws.cell(r, 5).value)
-                    id_val = safe_int(ws.cell(r, 6).value)
-                    dg_val = safe_int(ws.cell(r, 7).value)
-                    sj_val = safe_int(ws.cell(r, 8).value)
-                    lp_val = safe_int(ws.cell(r, 9).value)
-                    micro = safe_int(ws.cell(r, 10).value)
-                    trinc = safe_int(ws.cell(r, 11).value)
-                    tot_trinc = safe_int(ws.cell(r, 12).value) or (micro + trinc)
-                    
-                    perd_nn = safe_int(ws.cell(r, 13).value)
-                    tot_destinos = df_val + ns_val + id_val + dg_val + sj_val + lp_val + tot_trinc
-                    tot_class = safe_int(ws.cell(r, 14).value) or (tot_destinos + perd_nn)
-                    saldo_fim = safe_int(ws.cell(r, 15).value) or (saldo_ini - tot_class)
-
-                    nn_dict = base_dict.copy()
-                    nn_dict.update({
-                        "Origem": "Ninho Normal", "Saldo_Inicial": saldo_ini, "Sujo": sj_val, "Deformado": df_val,
-                        "Ninho_Sujo": ns_val, "Industrial": id_val, "Duas_Gemas": dg_val, "Ovo_Limpo": lp_val, 
-                        "Trincado": tot_trinc, "Microtrincado": micro, "Total_Destinos": tot_destinos,
-                        "Total_Classificado": tot_class, "Saldo_Final": saldo_fim,
-                        "P_NN": perd_nn
-                    })
-                    linhas.append(nn_dict)
-
-            elif secao_atual == "LOTES_VELHOS":
-                ns_ini = safe_int(ws.cell(r, 3).value)
-                cm_ini = safe_int(ws.cell(r, 4).value)
-
-                if ns_ini > 0:
-                    ns_dict = base_dict.copy()
-                    ns_dict.update({
-                        "Origem": "Ninho Sujo", "Saldo_Inicial": ns_ini, "Sujo": ns_ini, "Deformado": 0, "Ninho_Sujo": 0,
-                        "Industrial": 0, "Duas_Gemas": 0, "Ovo_Limpo": 0, "Trincado": 0, "Microtrincado": 0,
-                        "Total_Destinos": ns_ini, "Total_Classificado": ns_ini, "Saldo_Final": 0
-                    })
-                    linhas.append(ns_dict)
-
-                if cm_ini > 0:
-                    cm_dict = base_dict.copy()
-                    cm_dict.update({
-                        "Origem": "Cama", "Saldo_Inicial": cm_ini, "Sujo": cm_ini, "Deformado": 0, "Ninho_Sujo": 0,
-                        "Industrial": 0, "Duas_Gemas": 0, "Ovo_Limpo": 0, "Trincado": 0, "Microtrincado": 0,
-                        "Total_Destinos": cm_ini, "Total_Classificado": cm_ini, "Saldo_Final": 0
-                    })
-                    linhas.append(cm_dict)
-
-    aba_perdidos = next((s for s in wb.sheetnames if "perdido" in s.lower() or "quebra" in s.lower()), None)
-    if aba_perdidos:
-        ws_p = wb[aba_perdidos]
-        for r in range(2, ws_p.max_row + 1):
-            val_a = ws_p.cell(r, 1).value
-            if not val_a: continue
-            
-            str_a = str(val_a).strip().upper()
-            if str_a in ["DATA POSTURA", "DATA DE POSTURA", "TOTAL", "TOTAL =", "DATA"]: continue
-                
-            try:
-                dt_post = normalizar_data_str(val_a)
-                val_b = ws_p.cell(r, 2).value
-                lote_num = str(int(float(val_b))) if val_b and str(val_b).replace('.', '').replace(',', '').isnumeric() else "-"
-                
-                v_nn = safe_int(ws_p.cell(r, 3).value)
-                v_cama = safe_int(ws_p.cell(r, 4).value)
-                v_ns = safe_int(ws_p.cell(r, 5).value)
-                v_def = safe_int(ws_p.cell(r, 6).value)
-                v_sujo = safe_int(ws_p.cell(r, 7).value)
-                v_ind = safe_int(ws_p.cell(r, 8).value)
-                v_dg = safe_int(ws_p.cell(r, 9).value)
-                v_trinc = safe_int(ws_p.cell(r, 10).value)
-                    
-                if (v_nn + v_cama + v_ns + v_def + v_sujo + v_ind + v_dg + v_trinc) > 0:
-                    linhas.append({
-                        "Data_Processamento": data_proc,
-                        "Data_Postura": dt_post, "Lote": lote_num, "Origem": "Ovos Perdidos (Aba)",
-                        "Saldo_Inicial": 0, "Sujo": 0, "Deformado": 0, "Ninho_Sujo": 0,
-                        "Industrial": 0, "Duas_Gemas": 0, "Ovo_Limpo": 0, "Trincado": 0,
-                        "Microtrincado": 0, "Total_Destinos": 0, "Total_Classificado": 0, "Saldo_Final": 0, "Responsavel": str(resp),
-                        "P_NN": v_nn, "P_Cama": v_cama, "P_NS": v_ns, "P_Def": v_def, 
-                        "P_Sujo": v_sujo, "P_Ind": v_ind, "P_DG": v_dg, "P_Trinc": v_trinc
-                    })
-            except Exception:
-                pass
-
-    return pd.DataFrame(linhas)
+    df = df.dropna(subset=[lote_col, ovos_col])
+    
+    df["Nº Lote"] = df[lote_col].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
+    df["Produto"] = df[prod_col].astype(str) if prod_col in df.columns else ""
+    df["Ovos"] = pd.to_numeric(df[ovos_col], errors='coerce').fillna(0).astype(int)
+    df["Data Produção"] = df[prod_dt_col].apply(normalizar_data_str) if prod_dt_col in df.columns else ""
+    df["Data Transação"] = df[trans_dt_col].apply(normalizar_data_str) if trans_dt_col in df.columns else ""
+    
+    cols_agrupar = ["Nº Lote", "Produto", "Data Produção", "Data Transação"]
+    df = df.groupby(cols_agrupar, dropna=False, as_index=False)["Ovos"].sum()
+    return df
 
 def parse_vendas_romaneios(file_bytes):
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
@@ -589,24 +432,11 @@ def parse_vendas_romaneios(file_bytes):
             cliente_nome = df.iloc[1, 1]
             destino = df.iloc[3, 1]
             for r in range(9, len(df)):
-                dt_post = df.iloc[r, 0]
-                lote = df.iloc[r, 1]
-                tipo = df.iloc[r, 4]
-                caixas = df.iloc[r, 6]
-                ovos = df.iloc[r, 7]
+                dt_post = df.iloc[r, 0]; lote = df.iloc[r, 1]; tipo = df.iloc[r, 4]; caixas = df.iloc[r, 6]; ovos = df.iloc[r, 7]
                 if pd.notna(dt_post) and pd.notna(lote) and pd.notna(ovos):
                     try:
-                        qtd_ovos = int(float(ovos))
-                        if qtd_ovos > 0:
-                            vendas.append({
-                                "Data_Expedicao": data_exp,
-                                "Cliente": str(cliente_nome), "Destino": str(destino),
-                                "Data_Postura": normalizar_data_str(dt_post),
-                                "Lote": str(int(float(lote))), "Tipo_Ovo": str(tipo),
-                                "Caixas_360": float(caixas), "Quantidade_Ovos": qtd_ovos
-                            })
-                    except (ValueError, TypeError):
-                        pass
+                        if int(float(ovos)) > 0: vendas.append({"Data_Expedicao": data_exp, "Cliente": str(cliente_nome), "Destino": str(destino), "Data_Postura": normalizar_data_str(dt_post), "Lote": str(int(float(lote))), "Tipo_Ovo": str(tipo), "Caixas_360": float(caixas), "Quantidade_Ovos": int(float(ovos))})
+                    except Exception: pass
     return pd.DataFrame(vendas)
 
 def parse_transferencias_incubatorio(file_bytes):
@@ -616,80 +446,29 @@ def parse_transferencias_incubatorio(file_bytes):
         if aba.upper() in ["DICAS", "VEICULOS"]: continue
         df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=aba)
         if len(df) > 8 and df.shape[1] >= 8:
-            origem = df.iloc[0, 3]
-            destino = df.iloc[1, 3]
+            origem = df.iloc[0, 3]; destino = df.iloc[1, 3]
             data_exp = normalizar_data_str(df.iloc[4, 3])
             for r in range(9, len(df)):
-                palete = df.iloc[r, 1]
-                lote = df.iloc[r, 2]
-                dt_post = df.iloc[r, 3]
-                qtd = df.iloc[r, 4]
-                categoria = df.iloc[r, 7]
-                obs = df.iloc[r, 8] if df.shape[1] > 8 else ""
+                palete = df.iloc[r, 1]; lote = df.iloc[r, 2]; dt_post = df.iloc[r, 3]; qtd = df.iloc[r, 4]; categoria = df.iloc[r, 7]; obs = df.iloc[r, 8] if df.shape[1] > 8 else ""
                 if pd.notna(lote) and pd.notna(qtd):
                     try:
-                        qtd_ovos = int(float(qtd))
-                        if qtd_ovos > 0:
-                            transf.append({
-                                "Aba_Destino": aba, "Origem": str(origem), "Destino": str(destino),
-                                "Data_Expedicao": data_exp,
-                                "Palete": str(palete), "Lote": str(int(float(lote))),
-                                "Data_Postura": normalizar_data_str(dt_post),
-                                "Categoria": str(categoria), "Quantidade_Ovos": qtd_ovos,
-                                "Observacao": str(obs) if pd.notna(obs) else ""
-                            })
-                    except (ValueError, TypeError):
-                        pass
+                        if int(float(qtd)) > 0: transf.append({"Aba_Destino": aba, "Origem": str(origem), "Destino": str(destino), "Data_Expedicao": data_exp, "Palete": str(palete), "Lote": str(int(float(lote))), "Data_Postura": normalizar_data_str(dt_post), "Categoria": str(categoria), "Quantidade_Ovos": int(float(qtd)), "Observacao": str(obs) if pd.notna(obs) else ""})
+                    except Exception: pass
     return pd.DataFrame(transf)
 
-def parse_reclassificacao_mtech(file_bytes):
-    df = pd.read_excel(io.BytesIO(file_bytes))
-    df.columns = [str(c).strip() for c in df.columns]
-    
-    lote_col = next((c for c in df.columns if "LOTE" in c.upper()), "Nº Lote")
-    ovos_col = next((c for c in df.columns if "OVO" in c.upper() and "TRANS" not in c.upper() and "COD" not in c.upper()), "Ovos")
-    prod_dt_col = next((c for c in df.columns if "PRODU" in c.upper() or "POSTURA" in c.upper()), "Data Produção")
-    trans_dt_col = next((c for c in df.columns if "TRANS" in c.upper() or "MOVIM" in c.upper()), "Data Transação")
-
-    df = df.dropna(subset=[lote_col, ovos_col])
-    df["Nº Lote"] = df[lote_col].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
-    df["Ovos"] = pd.to_numeric(df[ovos_col], errors='coerce').fillna(0).astype(int)
-    df["Data Produção"] = df[prod_dt_col].apply(normalizar_data_str)
-    df["Data Transação"] = df[trans_dt_col].apply(normalizar_data_str)
-    return df
-
-def parse_descarte_mtech(file_bytes):
-    df = pd.read_excel(io.BytesIO(file_bytes))
-    df.columns = [str(c).strip() for c in df.columns]
-    
-    lote_col = next((c for c in df.columns if "LOTE" in c.upper()), "Nº Lote")
-    ovos_col = next((c for c in df.columns if "OVO" in c.upper() and "TRANS" not in c.upper() and "COD" not in c.upper()), "Ovos")
-    prod_dt_col = next((c for c in df.columns if "PRODU" in c.upper() or "POSTURA" in c.upper()), "Data Produção")
-    trans_dt_col = next((c for c in df.columns if "TRANS" in c.upper() or "MOVIM" in c.upper()), "Data Transação")
-    prod_col = next((c for c in df.columns if "PRODUTO" in c.upper() or "ITEM" in c.upper() or "DESCR" in c.upper()), "Produto")
-
-    df = df.dropna(subset=[ovos_col])
-    if lote_col in df.columns:
-        df["Nº Lote"] = df[lote_col].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
-    else:
-        df["Nº Lote"] = "-"
-        
-    df["Produto"] = df[prod_col]
-    df["Ovos"] = pd.to_numeric(df[ovos_col], errors='coerce').fillna(0).astype(int)
-    df["Data Produção"] = df[prod_dt_col].apply(normalizar_data_str)
-    df["Data Transação"] = df[trans_dt_col].apply(normalizar_data_str)
-    return df
-
 def inspecionar_e_processar_conteudo(uploaded_file):
+    nome_arquivo = getattr(uploaded_file, "name", "").lower()
     file_bytes = uploaded_file.getvalue()
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
     abas_lower = [s.lower().strip() for s in xls.sheet_names]
 
-    if any("classifica" in s for s in abas_lower):
+    # 1. Ficha de Reclassificação CPO
+    if any("classifica" in s for s in abas_lower) or "cpo" in nome_arquivo:
         df = parse_reclassificacao_cpo(file_bytes)
         DatabaseManager.salvar("df_reclass", df)
         return "Ficha de Reclassificação CPO", len(df)
 
+    # 2. Romaneios de Transferência OBI
     if any(s in ["dicas", "veiculos", "veículos"] for s in abas_lower):
         df = parse_transferencias_incubatorio(file_bytes)
         DatabaseManager.salvar("df_transf", df)
@@ -697,29 +476,49 @@ def inspecionar_e_processar_conteudo(uploaded_file):
 
     df_amostra = pd.read_excel(io.BytesIO(file_bytes), sheet_name=0)
     cols_upper = [str(c).strip().upper() for c in df_amostra.columns]
+    texto_interno = df_amostra.iloc[:10].to_string().upper() if not df_amostra.empty else ""
 
+    # 3. MTech - Lançamento de Reclassificação
     if any("TRANS OVO" in c for c in cols_upper):
         df = parse_reclassificacao_mtech(file_bytes)
         DatabaseManager.salvar("df_rec_mtech", df)
         return "MTech - Lançamento de Reclassificação", len(df)
 
-    if any("TRANSA" in c for c in cols_upper) or (any(c == "PRODUTO" for c in cols_upper) and any("OVO" in c for c in cols_upper)):
+    tem_lote = any("LOTE" in c for c in cols_upper)
+    tem_fazenda = any("FAZENDA" in c for c in cols_upper)
+    tem_transacao = any("TRANS" in c or "MOVIM" in c for c in cols_upper)
+
+    indica_descarte = (
+        any(k in nome_arquivo for k in ["descarte", "baixa", "perda", "quebra", "desc"]) or
+        any(k in s for s in abas_lower for k in ["descarte", "baixa", "perda"]) or
+        any("DESCARTE" in c or "BAIXA" in c for c in cols_upper) or
+        "DESCARTE" in texto_interno
+    )
+
+    indica_producao = (
+        any(k in nome_arquivo for k in ["produ", "coleta", "galp"]) or
+        any(k in s for s in abas_lower for k in ["produ", "coleta", "galp"])
+    )
+
+    # 4. MTech - Lançamento de Descartes
+    if indica_descarte or (tem_lote and tem_transacao and not indica_producao):
         df = parse_descarte_mtech(file_bytes)
         DatabaseManager.salvar("df_desc_mtech", df)
         return "MTech - Lançamento de Descartes", len(df)
 
-    if any("FAZENDA" in c for c in cols_upper) and any("LOTE" in c for c in cols_upper):
+    # 5. MTech - Produção Diária dos Galpões
+    if tem_fazenda and tem_lote:
         df = parse_producao_erp(file_bytes)
         DatabaseManager.salvar("df_prod", df)
         return "MTech - Produção Diária dos Galpões", len(df)
 
-    texto_interno = df_amostra.iloc[:10].to_string().upper() if not df_amostra.empty else ""
-    if "PALETE" in texto_interno:
+    # 6. Romaneios Auxiliares
+    if "PALETE" in texto_interno or any("PALETE" in c for c in cols_upper):
         df = parse_transferencias_incubatorio(file_bytes)
         DatabaseManager.salvar("df_transf", df)
         return "Romaneio de Transferência OBI", len(df)
     
-    if "CLIENTE" in texto_interno or "CAIXAS" in texto_interno:
+    if "CLIENTE" in texto_interno or "CAIXAS" in texto_interno or any("CLIENTE" in c for c in cols_upper):
         df = parse_vendas_romaneios(file_bytes)
         DatabaseManager.salvar("df_vendas", df)
         return "Romaneio de Venda Externa", len(df)
@@ -735,20 +534,20 @@ def render_reclass_table_html(df):
         bg = "#F9FBFA" if idx % 2 == 0 else "#FFFFFF"
         origem_color = "#1E40AF" if r["Origem"] == "Ninho Normal" else ("#B45309" if r["Origem"] == "Cama" else "#065F46")
         row_str = (
-            f'<tr style="background-color: {bg}; border-bottom: 1px solid #E2E8F0; color: #1E293B; font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; border-right: 1px solid #E2E8F0;">{r["Data_Postura"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid #CBD5E1;">{r["Lote"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; color: {origem_color}; border-right: 1px solid #E2E8F0;">{r["Origem"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid #CBD5E1;">{r["Saldo_Inicial"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Sujo"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Deformado"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Ninho_Sujo"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Industrial"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Duas_Gemas"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Ovo_Limpo"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid #CBD5E1;">{r["Trincado"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: #F1F5F9; border-right: 1px solid #E2E8F0;">{r["Total_Destinos"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: ' + ("#FEF2F2" if r["Saldo_Final"] > 0 else "#ECFDF5") + '; color: ' + ("#991B1B" if r["Saldo_Final"] > 0 else "#065F46") + f';">{r["Saldo_Final"]:,}'.replace(",", ".") + f'</td>'
+            f'<tr style="background-color: {bg}; border-bottom: 1px solid #E2E8F0; color: #1E293B; font-size: 15.5px;">'
+            f'<td style="padding: 12px; border-right: 1px solid #E2E8F0;">{r["Data_Postura"]}</td>'
+            f'<td style="padding: 12px; font-weight: 700; border-right: 2px solid #CBD5E1;">{r["Lote"]}</td>'
+            f'<td style="padding: 12px; font-weight: 700; color: {origem_color}; border-right: 1px solid #E2E8F0;">{r["Origem"]}</td>'
+            f'<td style="padding: 12px; font-weight: 700; text-align: right; border-right: 2px solid #CBD5E1;">{r["Saldo_Inicial"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Sujo"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Deformado"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Ninho_Sujo"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Industrial"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Duas_Gemas"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Ovo_Limpo"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 12px; font-weight: 700; text-align: right; border-right: 2px solid #CBD5E1;">{r["Trincado"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 12px; font-weight: 800; text-align: right; background-color: #F1F5F9; border-right: 1px solid #E2E8F0;">{r["Total_Destinos"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 12px; font-weight: 800; text-align: right; background-color: ' + ("#FEF2F2" if r["Saldo_Final"] > 0 else "#ECFDF5") + '; color: ' + ("#991B1B" if r["Saldo_Final"] > 0 else "#065F46") + f';">{r["Saldo_Final"]:,}'.replace(",", ".") + f'</td>'
             f'</tr>'
         )
         rows_html.append(row_str)
@@ -758,51 +557,49 @@ def render_reclass_table_html(df):
     t_dest, t_fim = df["Total_Destinos"].sum(), df["Saldo_Final"].sum()
 
     row_total = (
-        f'<tr style="background-color: #1E293B; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
-        f'<td colspan="3" style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">TOTAL GERAL DA SELEÇÃO</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{t_saldo:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_sujo:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_def:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_ns:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_ind:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_dg:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_limpo:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{t_trinc:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_dest:,}</td>'
-        f'<td style="padding: 12px; text-align: right;">{t_fim:,}</td>'
+        f'<tr style="background-color: #1E293B; color: #FFFFFF; font-weight: 800; font-size: 16px;">'
+        f'<td colspan="3" style="padding: 14px; text-align: right; border-right: 2px solid #CBD5E1;">TOTAL GERAL DA SELEÇÃO</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 2px solid #CBD5E1;">{t_saldo:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #475569;">{t_sujo:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #475569;">{t_def:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #475569;">{t_ns:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #475569;">{t_ind:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #475569;">{t_dg:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #475569;">{t_limpo:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 2px solid #CBD5E1;">{t_trinc:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #475569;">{t_dest:,}</td>'
+        f'<td style="padding: 14px; text-align: right;">{t_fim:,}</td>'
         f'</tr>'
     ).replace(",", ".")
-
-    tbody_content = "".join(rows_html) + row_total
 
     table_html = (
         '<div style="overflow-x: auto; width: 100%; border-radius: 10px; border: 1px solid #CBD5E1; margin-bottom: 22px;">'
         '<table style="min-width: 1300px; width: 100%; border-collapse: collapse; text-align: center;">'
         '<thead>'
         '<tr style="color: white; font-weight: 700; font-size: 13.5px;">'
-        '<th colspan="2" style="background-color: #334155; padding: 10px; border-right: 2px solid white;">IDENTIFICAÇÃO</th>'
-        '<th style="background-color: #1E3A8A; padding: 10px; border-right: 2px solid white;">ORIGEM</th>'
-        '<th style="background-color: #1E3A8A; padding: 10px; border-right: 2px solid white;">SALDO INI</th>'
-        '<th colspan="7" style="background-color: #14532D; padding: 10px; border-right: 2px solid white;">DESTINO COMERCIAL</th>'
-        '<th colspan="2" style="background-color: #475569; padding: 10px;">CONFERÊNCIA</th>'
+        '<th colspan="2" style="background-color: #334155; padding: 12px; border-right: 2px solid white;">IDENTIFICAÇÃO</th>'
+        '<th style="background-color: #1E3A8A; padding: 12px; border-right: 2px solid white;">ORIGEM</th>'
+        '<th style="background-color: #1E3A8A; padding: 12px; border-right: 2px solid white;">SALDO INI</th>'
+        '<th colspan="7" style="background-color: #14532D; padding: 12px; border-right: 2px solid white;">DESTINO COMERCIAL</th>'
+        '<th colspan="2" style="background-color: #475569; padding: 12px;">CONFERÊNCIA</th>'
         '</tr>'
         '<tr style="color: white; font-weight: 600; font-size: 14.5px;">'
-        '<th style="background-color: #475569; padding: 10px;">Data Postura</th>'
-        '<th style="background-color: #475569; padding: 10px; border-right: 2px solid white;">Lote</th>'
-        '<th style="background-color: #2563EB; padding: 10px;">Origem</th>'
-        '<th style="background-color: #2563EB; padding: 10px; border-right: 2px solid white;">Saldo Inicial</th>'
-        '<th style="background-color: #166534; padding: 10px;">Sujo</th>'
-        '<th style="background-color: #166534; padding: 10px;">Deformado</th>'
-        '<th style="background-color: #166534; padding: 10px;">Ninho Sujo</th>'
-        '<th style="background-color: #166534; padding: 10px;">Industrial</th>'
-        '<th style="background-color: #166534; padding: 10px;">Duas Gemas</th>'
-        '<th style="background-color: #166534; padding: 10px;">Ovo Limpo</th>'
-        '<th style="background-color: #166534; padding: 10px; border-right: 2px solid white;">Trincado</th>'
-        '<th style="background-color: #475569; padding: 10px;">Total Destinos</th>'
-        '<th style="background-color: #475569; padding: 10px;">Saldo Final</th>'
+        '<th style="background-color: #475569; padding: 12px;">Data Postura</th>'
+        '<th style="background-color: #475569; padding: 12px; border-right: 2px solid white;">Lote</th>'
+        '<th style="background-color: #2563EB; padding: 12px;">Origem</th>'
+        '<th style="background-color: #2563EB; padding: 12px; border-right: 2px solid white;">Saldo Inicial</th>'
+        '<th style="background-color: #166534; padding: 12px;">Sujo</th>'
+        '<th style="background-color: #166534; padding: 12px;">Deformado</th>'
+        '<th style="background-color: #166534; padding: 12px;">Ninho Sujo</th>'
+        '<th style="background-color: #166534; padding: 12px;">Industrial</th>'
+        '<th style="background-color: #166534; padding: 12px;">Duas Gemas</th>'
+        '<th style="background-color: #166534; padding: 12px;">Ovo Limpo</th>'
+        '<th style="background-color: #166534; padding: 12px; border-right: 2px solid white;">Trincado</th>'
+        '<th style="background-color: #475569; padding: 12px;">Total Destinos</th>'
+        '<th style="background-color: #475569; padding: 12px;">Saldo Final</th>'
         '</tr>'
         '</thead>'
-        f'<tbody>{tbody_content}</tbody>'
+        f'<tbody>{"".join(rows_html) + row_total}</tbody>'
         '</table></div>'
     )
     return table_html
@@ -812,18 +609,18 @@ def render_descarte_table_html(df):
     for idx, r in df.iterrows():
         bg = "#FFF5F5" if idx % 2 == 0 else "#FFFFFF"
         rows_html.append(
-            f'<tr style="background-color: {bg}; border-bottom: 1px solid #FEE2E2; color: #1E293B; font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; border-right: 1px solid #FEE2E2;">{r["Data_Postura"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid #CBD5E1;">{r["Lote"]}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 800; color: #1E3A8A;">{r["Ninho Normal"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Cama"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Ninho Sujo"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Deformado"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Sujo Granja"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Industrial"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Duas Gemas"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Trincado"]:,}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; color: #991B1B; border-left: 2px solid #CBD5E1;">{r["TOTAL BAIXA"]:,}</td>'
+            f'<tr style="background-color: {bg}; border-bottom: 1px solid #FEE2E2; color: #1E293B; font-size: 15.5px;">'
+            f'<td style="padding: 12px; border-right: 1px solid #FEE2E2;">{r["Data_Postura"]}</td>'
+            f'<td style="padding: 12px; font-weight: 700; border-right: 2px solid #CBD5E1;">{r["Lote"]}</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 800; color: #1E3A8A;">{r["Ninho Normal"]:,}</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Cama"]:,}</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Ninho Sujo"]:,}</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Deformado"]:,}</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Sujo Granja"]:,}</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Industrial"]:,}</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Duas Gemas"]:,}</td>'
+            f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Trincado"]:,}</td>'
+            f'<td style="padding: 12px; font-weight: 800; text-align: right; color: #991B1B; border-left: 2px solid #CBD5E1;">{r["TOTAL BAIXA"]:,}</td>'
             f'</tr>'.replace(",", ".")
         )
     
@@ -832,41 +629,39 @@ def render_descarte_table_html(df):
     t_dg, t_trinc, t_total = df["Duas Gemas"].sum(), df["Trincado"].sum(), df["TOTAL BAIXA"].sum()
     
     row_total = (
-        f'<tr style="background-color: #991B1B; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
-        f'<td colspan="2" style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">TOTAL BAIXAS DA SELEÇÃO</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FCA5A5;">{t_nn:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FCA5A5;">{t_cama:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FCA5A5;">{t_ns:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FCA5A5;">{t_def:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FCA5A5;">{t_sujog:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FCA5A5;">{t_ind:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FCA5A5;">{t_dg:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #FCA5A5;">{t_trinc:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-left: 2px solid #CBD5E1;">{t_total:,}</td>'
+        f'<tr style="background-color: #991B1B; color: #FFFFFF; font-weight: 800; font-size: 16px;">'
+        f'<td colspan="2" style="padding: 14px; text-align: right; border-right: 2px solid #CBD5E1;">TOTAL BAIXAS DA SELEÇÃO</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #FCA5A5;">{t_nn:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #FCA5A5;">{t_cama:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #FCA5A5;">{t_ns:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #FCA5A5;">{t_def:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #FCA5A5;">{t_sujog:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #FCA5A5;">{t_ind:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #FCA5A5;">{t_dg:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-right: 1px solid #FCA5A5;">{t_trinc:,}</td>'
+        f'<td style="padding: 14px; text-align: right; border-left: 2px solid #CBD5E1;">{t_total:,}</td>'
         f'</tr>'.replace(",", ".")
     )
-    
-    tbody_content = "".join(rows_html) + row_total
     
     table_html = (
         '<div style="overflow-x: auto; width: 100%; border-radius: 10px; border: 1px solid #FECACA; margin-bottom: 22px;">'
         '<table style="min-width: 1050px; width: 100%; border-collapse: collapse; text-align: center;">'
         '<thead>'
         '<tr style="color: white; font-weight: 700; font-size: 13.5px; background-color: #334155;">'
-        '<th style="padding: 10px; border-right: 1px solid #64748B;">Data Postura</th>'
-        '<th style="padding: 10px; border-right: 2px solid white;">Lote</th>'
-        '<th style="padding: 10px; border-right: 1px solid #64748B;">Perdido (NN) / Ninho Normal</th>'
-        '<th style="padding: 10px; border-right: 1px solid #64748B;">Cama</th>'
-        '<th style="padding: 10px; border-right: 1px solid #64748B;">Ninho Sujo</th>'
-        '<th style="padding: 10px; border-right: 1px solid #64748B;">Deformado</th>'
-        '<th style="padding: 10px; border-right: 1px solid #64748B;">Sujo Granja</th>'
-        '<th style="padding: 10px; border-right: 1px solid #64748B;">Industrial</th>'
-        '<th style="padding: 10px; border-right: 1px solid #64748B;">Duas Gemas</th>'
-        '<th style="padding: 10px; border-right: 2px solid white;">Trincado</th>'
-        '<th style="padding: 10px; background-color: #991B1B;">TOTAL BAIXA</th>'
+        '<th style="padding: 12px; border-right: 1px solid #64748B;">Data Postura</th>'
+        '<th style="padding: 12px; border-right: 2px solid white;">Lote</th>'
+        '<th style="padding: 12px; border-right: 1px solid #64748B;">Ninho Normal</th>'
+        '<th style="padding: 12px; border-right: 1px solid #64748B;">Cama</th>'
+        '<th style="padding: 12px; border-right: 1px solid #64748B;">Ninho Sujo</th>'
+        '<th style="padding: 12px; border-right: 1px solid #64748B;">Deformado</th>'
+        '<th style="padding: 12px; border-right: 1px solid #64748B;">Sujo Granja</th>'
+        '<th style="padding: 12px; border-right: 1px solid #64748B;">Industrial</th>'
+        '<th style="padding: 12px; border-right: 1px solid #64748B;">Duas Gemas</th>'
+        '<th style="padding: 12px; border-right: 2px solid white;">Trincado</th>'
+        '<th style="padding: 12px; background-color: #991B1B;">TOTAL BAIXA</th>'
         '</tr>'
         '</thead>'
-        f'<tbody>{tbody_content}</tbody>'
+        f'<tbody>{"".join(rows_html) + row_total}</tbody>'
         '</table></div>'
     )
     return table_html
@@ -900,14 +695,7 @@ tela = st.sidebar.radio(
 
 st.sidebar.markdown('<div class="nav-label">Cotação & Parâmetros</div>', unsafe_allow_html=True)
 
-preco_unitario = st.sidebar.number_input(
-    "Preço por Unidade (R$):",
-    min_value=0.000,
-    value=2.380,
-    step=0.010,
-    format="%.3f"
-)
-
+preco_unitario = st.sidebar.number_input("Preço por Unidade (R$):", min_value=0.000, value=2.380, step=0.010, format="%.3f")
 valor_caixa_calc = preco_unitario * 360.0
 val_cx_str = f"R$ {valor_caixa_calc:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -1082,9 +870,6 @@ elif tela == "📥 Central de Carga de Arquivos":
                     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ==============================================================================
-# TELA: VALIDAÇÃO DE RECLASSIFICAÇÃO & DESCARTES
-# ==============================================================================
 elif tela == "📋 Validação de Reclassificação & Descartes":
     st.markdown("""
     <div class="top-header-bar">
@@ -1136,26 +921,33 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
             show_warning("Nenhum dado encontrado para esta combinação de filtros.")
             st.stop()
 
+        # ======================================================================
         # 1. LANÇAMENTO DE RECLASSIFICAÇÃO
+        # ======================================================================
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
         st.subheader("1. Lançamento de Reclassificação — Destinos Comerciais")
         
         df_comercial = df_r[df_r["Origem"].isin(["Ninho Normal", "Ninho Sujo", "Cama"])].copy()
-        colunas_espelho = [
-            "Data_Postura", "Lote", "Origem", "Saldo_Inicial", "Sujo", "Deformado", 
-            "Ninho_Sujo", "Industrial", "Duas_Gemas", "Ovo_Limpo", "Trincado", 
-            "Total_Destinos", "Saldo_Final"
-        ]
-        df_comercial_limpo = df_comercial[colunas_espelho]
+        
+        df_comercial["Sujo"] = df_comercial.apply(lambda row: row["Saldo_Inicial"] if row["Origem"] in ["Ninho Sujo", "Cama"] else row["Sujo"], axis=1)
+
+        colunas_espelho = ["Data_Postura", "Lote", "Origem", "Saldo_Inicial", "Sujo", "Deformado", "Ninho_Sujo", "Industrial", "Duas_Gemas", "Ovo_Limpo", "Trincado", "Total_Destinos", "Saldo_Final"]
+        df_comercial_limpo = df_comercial[colunas_espelho].copy()
+        
+        if not df_comercial_limpo.empty:
+            df_totais_comercial = pd.DataFrame([["TOTAIS GERAIS", "-", "-", df_comercial_limpo["Saldo_Inicial"].sum(), df_comercial_limpo["Sujo"].sum(), df_comercial_limpo["Deformado"].sum(), df_comercial_limpo["Ninho_Sujo"].sum(), df_comercial_limpo["Industrial"].sum(), df_comercial_limpo["Duas_Gemas"].sum(), df_comercial_limpo["Ovo_Limpo"].sum(), df_comercial_limpo["Trincado"].sum(), df_comercial_limpo["Total_Destinos"].sum(), df_comercial_limpo["Saldo_Final"].sum()]], columns=colunas_espelho)
+            df_comercial_display = pd.concat([df_comercial_limpo, df_totais_comercial], ignore_index=True)
+        else:
+            df_comercial_display = df_comercial_limpo
         
         tab_v1, tab_v2 = st.tabs(["🎨 Visão Formatada (Com Totais)", "📊 Tabela Interativa (Planilha Limpa)"])
-        with tab_v1:
-            st.markdown(render_reclass_table_html(df_comercial), unsafe_allow_html=True)
-        with tab_v2:
-            st.dataframe(df_comercial_limpo, use_container_width=True, hide_index=True)
+        with tab_v1: st.markdown(render_reclass_table_html(df_comercial), unsafe_allow_html=True)
+        with tab_v2: st.dataframe(df_comercial_display.style.apply(lambda x: ['background-color: #f1f5f9; font-weight: bold' if x.name == df_comercial_display.index[-1] else '' for i in x], axis=1) if not df_comercial_display.empty else df_comercial_display, use_container_width=True, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+        # ======================================================================
         # 2. LANÇAMENTO DE DESCARTES COM LOTE REAL E PERDIDAS (NN)
+        # ======================================================================
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
         st.subheader("2. Lançamento de Baixa & Descarte (MTech)")
         
@@ -1165,50 +957,46 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
         
         cols_perd = ["P_NN", "P_Cama", "P_NS", "P_Def", "P_Sujo", "P_Ind", "P_DG", "P_Trinc"]
         df_baixa_perd = df_r[df_r["Origem"] == "Ovos Perdidos (Aba)"][["Data_Postura", "Lote"] + cols_perd].copy()
-        df_baixa_perd = df_baixa_perd.rename(columns={
-            "P_NN": "Ninho Normal", "P_Cama": "Cama", "P_NS": "Ninho Sujo",
-            "P_Def": "Deformado", "P_Sujo": "Sujo Granja", "P_Ind": "Industrial",
-            "P_DG": "Duas Gemas", "P_Trinc": "Trincado"
-        })
+        df_baixa_perd = df_baixa_perd.rename(columns={"P_NN": "Ninho Normal", "P_Cama": "Cama", "P_NS": "Ninho Sujo", "P_Def": "Deformado", "P_Sujo": "Sujo Granja", "P_Ind": "Industrial", "P_DG": "Duas Gemas", "P_Trinc": "Trincado"})
         
         df_desc_final = pd.concat([df_baixa_class, df_baixa_perd], ignore_index=True).fillna(0)
-        
         all_cols = ["Ninho Normal", "Cama", "Ninho Sujo", "Deformado", "Sujo Granja", "Industrial", "Duas Gemas", "Trincado"]
         for c in all_cols:
-            if c not in df_desc_final.columns:
-                df_desc_final[c] = 0
+            if c not in df_desc_final.columns: df_desc_final[c] = 0
             df_desc_final[c] = df_desc_final[c].astype(int)
 
         df_desc_final = df_desc_final.groupby(["Data_Postura", "Lote"])[all_cols].sum().reset_index()
         df_desc_final["TOTAL BAIXA"] = df_desc_final[all_cols].sum(axis=1)
-        df_desc_final = df_desc_final[df_desc_final["TOTAL BAIXA"] > 0]
-        df_desc_final = df_desc_final.sort_values(by=["Data_Postura", "Lote"], ascending=[False, True])
+        df_desc_final = df_desc_final[df_desc_final["TOTAL BAIXA"] > 0].sort_values(by=["Data_Postura", "Lote"], ascending=[False, True])
 
         if not df_desc_final.empty:
+            df_totais_desc = pd.DataFrame([["TOTAIS GERAIS", "-"] + [df_desc_final[c].sum() for c in all_cols] + [df_desc_final["TOTAL BAIXA"].sum()]], columns=["Data_Postura", "Lote"] + all_cols + ["TOTAL BAIXA"])
+            df_desc_display = pd.concat([df_desc_final, df_totais_desc], ignore_index=True)
+            
             tab_d1, tab_d2 = st.tabs(["🔴 Visão Formatada (Detalhamento Completo)", "📊 Tabela Interativa"])
-            with tab_d1:
-                st.markdown(render_descarte_table_html(df_desc_final), unsafe_allow_html=True)
-            with tab_d2:
-                st.dataframe(df_desc_final, use_container_width=True, hide_index=True)
+            with tab_d1: st.markdown(render_descarte_table_html(df_desc_final), unsafe_allow_html=True)
+            with tab_d2: st.dataframe(df_desc_display.style.apply(lambda x: ['background-color: #fca5a5; font-weight: bold; color: #991B1B' if x.name == df_desc_display.index[-1] else '' for i in x], axis=1), use_container_width=True, hide_index=True)
         else:
             show_info("Nenhuma baixa/descarte para registrar nas abas (Comercial ou Ovos Perdidos).")
-            
         st.markdown('</div>', unsafe_allow_html=True)
 
+        # ======================================================================
         # 3. RESUMOS OPERACIONAIS
+        # ======================================================================
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
         st.subheader("3. Resumo de Fechamento por Data de Postura")
         col_res1, col_res2 = st.columns(2)
         with col_res1:
             st.markdown("**🥚 Resumo de Trincados para Faturamento**")
             res_trinc = df_r[df_r["Origem"] != "Ovos Perdidos (Aba)"].groupby("Data_Postura").agg({"Microtrincado": "sum"}).reset_index()
-            st.dataframe(res_trinc, use_container_width=True, hide_index=True)
-
+            if not res_trinc.empty: res_trinc.loc["Total"] = ["TOTAIS GERAIS", res_trinc["Microtrincado"].sum()]
+            st.dataframe(res_trinc.style.apply(lambda x: ['font-weight: bold; background-color: #f1f5f9' if x.name == 'Total' else '' for i in x], axis=1) if not res_trinc.empty else res_trinc, use_container_width=True, hide_index=True)
         with col_res2:
             st.markdown("**🧹 Resumo Consolidado de Ovos Sujos**")
             res_sujo = df_r[df_r["Origem"] != "Ovos Perdidos (Aba)"].groupby("Data_Postura").agg({"Sujo": "sum"}).reset_index()
             res_sujo.rename(columns={"Sujo": "Total Sujo"}, inplace=True)
-            st.dataframe(res_sujo, use_container_width=True, hide_index=True)
+            if not res_sujo.empty: res_sujo.loc["Total"] = ["TOTAIS GERAIS", res_sujo["Total Sujo"].sum()]
+            st.dataframe(res_sujo.style.apply(lambda x: ['font-weight: bold; background-color: #f1f5f9' if x.name == 'Total' else '' for i in x], axis=1) if not res_sujo.empty else res_sujo, use_container_width=True, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         # ======================================================================
@@ -1225,11 +1013,32 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
             df_rec_m_sub = df_rec_mtech_orig.copy()
             df_rec_m_sub = df_rec_m_sub[df_rec_m_sub["Data Transação"] == filtro_proc]
             
-            if filtro_dt != "Todas as Datas":
-                df_rec_m_sub = df_rec_m_sub[df_rec_m_sub["Data Produção"] == filtro_dt]
+            if filtro_dt != "Todas as Datas": df_rec_m_sub = df_rec_m_sub[df_rec_m_sub["Data Produção"] == filtro_dt]
 
-            df_rec_m_sub["Categoria_Normalizada"] = df_rec_m_sub["Nome Produto"].apply(mapear_categoria_mtech)
+            col_nome = "Nome Produto" if "Nome Produto" in df_rec_m_sub.columns else ("Produto" if "Produto" in df_rec_m_sub.columns else "")
+            if col_nome:
+                df_rec_m_sub["Categoria_Normalizada"] = df_rec_m_sub[col_nome].apply(mapear_categoria_mtech)
+            else:
+                df_rec_m_sub["Categoria_Normalizada"] = "Outros"
 
+            # VALIDAÇÃO SILENCIOSA DE ORIGEM (CRÉDITOS MTECH VS FICHA)
+            tot_saida_nn = df_r[df_r["Origem"] == "Ninho Normal"]["Total_Classificado"].sum()
+            tot_saida_ns = df_r[df_r["Origem"] == "Ninho Sujo"]["Saldo_Inicial"].sum()
+            tot_saida_cm = df_r[df_r["Origem"] == "Cama"]["Saldo_Inicial"].sum()
+
+            mtech_saidas = df_rec_m_sub[df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("Cr[é|e]dito", case=False, na=False)]
+            mtech_saida_nn = mtech_saidas[mtech_saidas["Categoria_Normalizada"] == "Ninho Normal"]["Ovos"].sum()
+            mtech_saida_ns = mtech_saidas[mtech_saidas["Categoria_Normalizada"] == "Ninho Sujo"]["Ovos"].sum()
+            mtech_saida_cm = mtech_saidas[mtech_saidas["Categoria_Normalizada"] == "Cama"]["Ovos"].sum()
+
+            erros_origem = []
+            if tot_saida_nn != mtech_saida_nn: erros_origem.append(f"• Ninho Normal (Ficha CPO: {int(tot_saida_nn):,} | MTech Crédito: {int(mtech_saida_nn):,})".replace(",", "."))
+            if tot_saida_ns != mtech_saida_ns: erros_origem.append(f"• Ninho Sujo Velho (Ficha CPO: {int(tot_saida_ns):,} | MTech Crédito: {int(mtech_saida_ns):,})".replace(",", "."))
+            if tot_saida_cm != mtech_saida_cm: erros_origem.append(f"• Cama Velha (Ficha CPO: {int(tot_saida_cm):,} | MTech Crédito: {int(mtech_saida_cm):,})".replace(",", "."))
+                
+            if erros_origem: show_error("Divergência detectada nas Origens (Saídas/Créditos) do MTech:<br><br>" + "<br>".join(erros_origem))
+
+            # VALIDAÇÃO DE DESTINOS COMERCIAIS (DÉBITOS)
             categorias_alvo = ["Sujo", "Deformado", "Ninho Sujo", "Industrial", "Duas Gemas", "Ovo Limpo", "Trincado"]
             tot_dest_ficha = df_comercial[["Sujo", "Deformado", "Ninho_Sujo", "Industrial", "Duas_Gemas", "Ovo_Limpo", "Trincado"]].sum().sum()
             
@@ -1238,18 +1047,45 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
                 (df_rec_m_sub["Categoria_Normalizada"].isin(categorias_alvo))
             ]["Ovos"].sum()
             
-            dif_reclass = tot_dest_ficha - tot_cred_m
+            cats_comerciais = [
+                ("Sujo", "Sujo", df_comercial["Sujo"].sum()),
+                ("Deformado", "Deformado", df_comercial["Deformado"].sum()),
+                ("Ninho Sujo", "Ninho Sujo", df_comercial["Ninho_Sujo"].sum()),
+                ("Industrial", "Industrial", df_comercial["Industrial"].sum()),
+                ("Duas Gemas", "Duas Gemas", df_comercial["Duas_Gemas"].sum()),
+                ("Ovo Limpo", "Ovo Limpo", df_comercial["Ovo_Limpo"].sum()),
+                ("Trincado", "Trincado", df_comercial["Trincado"].sum()),
+            ]
+
+            linhas_validacao_reclass = []
+            for nome_exib, cat_chave, qtd_f in cats_comerciais:
+                qtd_m = df_rec_m_sub[
+                    (df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("D[é|e]bito", case=False, na=False)) & 
+                    (df_rec_m_sub["Categoria_Normalizada"] == cat_chave)
+                ]["Ovos"].sum()
+                
+                diferenca = qtd_f - qtd_m
+                linhas_validacao_reclass.append({
+                    "Categoria do Ovo": nome_exib,
+                    "Ficha CPO (Físico)": int(qtd_f),
+                    "MTech (Sistema)": int(qtd_m),
+                    "Divergência": int(diferenca),
+                    "Status": "✅ OK" if diferenca == 0 else f"❌ Erro ({diferenca:+,})"
+                })
+
+            df_val_reclass = pd.DataFrame(linhas_validacao_reclass)
+            tot_div_abs_reclass = df_val_reclass["Divergência"].abs().sum()
 
             st.markdown(f"""
             <div class="kpi-container" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
-                <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if dif_reclass == 0 else '#DC2626'};">
-                    <div class="kpi-icon-bubble {'bubble-green' if dif_reclass == 0 else 'bubble-red'}">
-                        {'✓' if dif_reclass == 0 else '✕'}
+                <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if tot_div_abs_reclass == 0 else '#DC2626'};">
+                    <div class="kpi-icon-bubble {'bubble-green' if tot_div_abs_reclass == 0 else 'bubble-red'}">
+                        {'✓' if tot_div_abs_reclass == 0 else '✕'}
                     </div>
                     <div>
                         <p class="kpi-title">Balanço Total de Reclassificação</p>
-                        <p class="kpi-value" style="color: {'#16A34A' if dif_reclass == 0 else '#DC2626'}; font-size: 1.4rem;">
-                            {'✅ 100% Validado' if dif_reclass == 0 else f'❌ Divergência: {dif_reclass:+,} ovos'}
+                        <p class="kpi-value" style="color: {'#16A34A' if tot_div_abs_reclass == 0 else '#DC2626'}; font-size: 1.4rem;">
+                            {'✅ 100% Validado' if tot_div_abs_reclass == 0 else f'❌ Divergência Absoluta: {tot_div_abs_reclass:,} ovos'}
                         </p>
                         <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">
                             Ficha CPO: {tot_dest_ficha:,.0f} | MTech (Entrada): {tot_cred_m:,.0f}
@@ -1269,68 +1105,20 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
             </div>
             """.replace(",", "."), unsafe_allow_html=True)
 
-            cats_comerciais = [
-                ("Sujo (02 / 06)", "Sujo", df_comercial["Sujo"].sum()),
-                ("Deformado (12)", "Deformado", df_comercial["Deformado"].sum()),
-                ("Ninho Sujo (02)", "Ninho Sujo", df_comercial["Ninho_Sujo"].sum()),
-                ("Industrial (08)", "Industrial", df_comercial["Industrial"].sum()),
-                ("Duas Gemas (04)", "Duas Gemas", df_comercial["Duas_Gemas"].sum()),
-                ("Ovo Limpo (13)", "Ovo Limpo", df_comercial["Ovo_Limpo"].sum()),
-                ("Trincado / Micro (05)", "Trincado", df_comercial["Trincado"].sum()),
-            ]
+            df_val_reclass.loc[len(df_val_reclass)] = {
+                "Categoria do Ovo": "TOTAIS GERAIS",
+                "Ficha CPO (Físico)": df_val_reclass["Ficha CPO (Físico)"].sum(),
+                "MTech (Sistema)": df_val_reclass["MTech (Sistema)"].sum(),
+                "Divergência": tot_div_abs_reclass,
+                "Status": ""
+            }
 
-            linhas_validacao_reclass = []
-            for nome_exib, cat_chave, qtd_f in cats_comerciais:
-                qtd_m = df_rec_m_sub[
-                    (df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("D[é|e]bito", case=False, na=False)) & 
-                    (df_rec_m_sub["Categoria_Normalizada"] == cat_chave)
-                ]["Ovos"].sum()
-                
-                diferenca = qtd_f - qtd_m
-                linhas_validacao_reclass.append({
-                    "Categoria do Ovo": nome_exib,
-                    "Ficha CPO (Físico)": int(qtd_f),
-                    "MTech (Sistema)": int(qtd_m),
-                    "Divergência": int(diferenca),
-                    "Status": "✅ OK" if diferenca == 0 else f"❌ Erro ({diferenca:+,})"
-                })
-
-            st.dataframe(pd.DataFrame(linhas_validacao_reclass), use_container_width=True, hide_index=True)
-
-            # VALIDAÇÃO DE ORIGEM
-            st.markdown("<hr>", unsafe_allow_html=True)
-            st.markdown("<h4 style='font-size: 16px;'>Validação de Saída da Reclassificação (Origens MTech)</h4>", unsafe_allow_html=True)
-            
-            tot_saida_nn = df_r[df_r["Origem"] == "Ninho Normal"]["Total_Classificado"].sum()
-            tot_saida_ns = df_r[df_r["Origem"] == "Ninho Sujo"]["Saldo_Inicial"].sum()
-            tot_saida_cm = df_r[df_r["Origem"] == "Cama"]["Saldo_Inicial"].sum()
-
-            linhas_validacao_origem = []
-            for nome_origem, cat_origem, qtd_saida_ficha in [
-                ("Saída de Ninho Normal (NN)", "Ninho Normal", tot_saida_nn),
-                ("Saída de Ninho Sujo Velho", "Ninho Sujo", tot_saida_ns),
-                ("Saída de Cama", "Cama", tot_saida_cm)
-            ]:
-                qtd_saida_mtech = df_rec_m_sub[
-                    (df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("Cr[é|e]dito", case=False, na=False)) & 
-                    (df_rec_m_sub["Categoria_Normalizada"] == cat_origem)
-                ]["Ovos"].sum()
-                
-                diferenca = qtd_saida_ficha - qtd_saida_mtech
-                linhas_validacao_origem.append({
-                    "Origem Baixada": nome_origem,
-                    "Ficha CPO (Saída Esperada)": int(qtd_saida_ficha),
-                    "MTech Crédito (Saída Lançada)": int(qtd_saida_mtech),
-                    "Divergência": int(diferenca),
-                    "Status": "✅ OK" if diferenca == 0 else f"❌ Erro ({diferenca:+,})"
-                })
-
-            st.dataframe(pd.DataFrame(linhas_validacao_origem), use_container_width=True, hide_index=True)
+            st.dataframe(df_val_reclass.style.apply(lambda x: ['font-weight: bold; background-color: #f1f5f9' if x.name == df_val_reclass.index[-1] else '' for i in x], axis=1), use_container_width=True, hide_index=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
 
         # ======================================================================
-        # 4.2 VALIDAÇÃO EXCLUSIVA: DESCARTES POR TIPO DE OVO (COM NN PERDIDO)
+        # 4.2 VALIDAÇÃO EXCLUSIVA: DESCARTES POR TIPO DE OVO (ALINHADA E EXPANDIDA)
         # ======================================================================
         st.markdown('<div class="saas-panel" style="border-top: 4px solid #DC2626;">', unsafe_allow_html=True)
         st.subheader("4.2 Validação de Baixas & Descartes por Tipo de Ovo")
@@ -1342,72 +1130,38 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
         else:
             df_desc_m_sub = df_desc_mtech_orig.copy()
             df_desc_m_sub = df_desc_m_sub[df_desc_m_sub["Data Transação"] == filtro_proc]
-            
-            if filtro_dt != "Todas as Datas":
-                df_desc_m_sub = df_desc_m_sub[df_desc_m_sub["Data Produção"] == filtro_dt]
+            if filtro_dt != "Todas as Datas": df_desc_m_sub = df_desc_m_sub[df_desc_m_sub["Data Produção"] == filtro_dt]
 
-            df_desc_m_sub["Categoria_Normalizada"] = df_desc_m_sub["Produto"].apply(mapear_categoria_mtech)
+            col_nome_desc = "Produto" if "Produto" in df_desc_m_sub.columns else ("Nome Produto" if "Nome Produto" in df_desc_m_sub.columns else "")
+            if col_nome_desc:
+                df_desc_m_sub["Categoria_Normalizada"] = df_desc_m_sub[col_nome_desc].apply(mapear_categoria_mtech)
+            else:
+                df_desc_m_sub["Categoria_Normalizada"] = "Outros"
 
             tot_desc_esperado_cpo = df_desc_final["TOTAL BAIXA"].sum() if not df_desc_final.empty else 0
             
             tot_desc_galpao = 0
             if not df_p_original.empty:
                 df_p_sub = df_p_original.copy()
-                if filtro_dt != "Todas as Datas":
-                    df_p_sub = df_p_sub[df_p_sub["Data Produção"] == filtro_dt]
-                df_p_sub["Cat_Prod"] = df_p_sub["Nome Produto"].apply(mapear_categoria_mtech)
-                tot_desc_galpao = df_p_sub[df_p_sub["Cat_Prod"].isin(["Trincado", "Ninho Normal"]) & df_p_sub["Nome Produto"].astype(str).str.contains("TRINCADO|PERDIDO|QUEBRA", case=False, na=False)]["Ovos"].sum()
+                if filtro_dt != "Todas as Datas": df_p_sub = df_p_sub[df_p_sub["Data Produção"] == filtro_dt]
+                
+                col_nome_prod = "Nome Produto" if "Nome Produto" in df_p_sub.columns else ("Produto" if "Produto" in df_p_sub.columns else "")
+                if col_nome_prod:
+                    df_p_sub["Cat_Prod"] = df_p_sub[col_nome_prod].apply(mapear_categoria_mtech)
+                    tot_desc_galpao = df_p_sub[df_p_sub["Cat_Prod"].isin(["Trincado", "Ninho Normal", "Perda Galpão"]) & df_p_sub[col_nome_prod].astype(str).str.contains("TRINCADO|PERDIDO|QUEBRA", case=False, na=False)]["Ovos"].sum()
 
             tot_esperado_geral = tot_desc_esperado_cpo + tot_desc_galpao
             tot_desc_m = df_desc_m_sub["Ovos"].sum()
-            dif_desc_geral = tot_esperado_geral - tot_desc_m
 
-            st.markdown(f"""
-            <div class="kpi-container" style="grid-template-columns: repeat(3, 1fr); margin-top: 10px;">
-                <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if dif_desc_geral == 0 else '#DC2626'};">
-                    <div class="kpi-icon-bubble {'bubble-green' if dif_desc_geral == 0 else 'bubble-red'}">
-                        {'✓' if dif_desc_geral == 0 else '✕'}
-                    </div>
-                    <div>
-                        <p class="kpi-title">Balanço Total de Descartes</p>
-                        <p class="kpi-value" style="color: {'#16A34A' if dif_desc_geral == 0 else '#DC2626'}; font-size: 1.4rem;">
-                            {'✅ 100% Validado' if dif_desc_geral == 0 else f'❌ Divergência: {dif_desc_geral:+,} ovos'}
-                        </p>
-                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">
-                            Total Esperado: {tot_esperado_geral:,.0f} | MTech: {tot_desc_m:,.0f}
-                        </p>
-                    </div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-icon-bubble bubble-yellow">🥚</div>
-                    <div>
-                        <p class="kpi-title">Descartes do CPO (Fichas)</p>
-                        <p class="kpi-value" style="font-size: 1.3rem;">{tot_desc_esperado_cpo:,.0f}</p>
-                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">NN Perdidos + Avarias</p>
-                    </div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-icon-bubble bubble-teal">🚜</div>
-                    <div>
-                        <p class="kpi-title">Descartes Galpão (Produção)</p>
-                        <p class="kpi-value" style="font-size: 1.3rem;">{tot_desc_galpao:,.0f}</p>
-                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Baixas Diretas na Coleta</p>
-                    </div>
-                </div>
-            </div>
-            """.replace(",", "."), unsafe_allow_html=True)
-
-            st.markdown("<h4 style='font-size: 16px;'>Comparativo Detalhado por Tipo de Ovo (Descartes & Perdas)</h4>", unsafe_allow_html=True)
-            
             cats_descartes = [
-                ("Perdido (NN) / Ninho Normal", "Ninho Normal", df_desc_final["Ninho Normal"].sum() if "Ninho Normal" in df_desc_final.columns else 0),
-                ("Cama (CM)", "Cama", df_desc_final["Cama"].sum() if "Cama" in df_desc_final.columns else 0),
-                ("Ninho Sujo (NS)", "Ninho Sujo", df_desc_final["Ninho Sujo"].sum() if "Ninho Sujo" in df_desc_final.columns else 0),
-                ("Deformado (DF)", "Deformado", df_desc_final["Deformado"].sum() if "Deformado" in df_desc_final.columns else 0),
-                ("Sujo Granja (SJ)", "Sujo", df_desc_final["Sujo Granja"].sum() if "Sujo Granja" in df_desc_final.columns else 0),
-                ("Industrial (ID)", "Industrial", df_desc_final["Industrial"].sum() if "Industrial" in df_desc_final.columns else 0),
-                ("Duas Gemas (DG)", "Duas Gemas", df_desc_final["Duas Gemas"].sum() if "Duas Gemas" in df_desc_final.columns else 0),
-                ("Trincado / Micro (TR)", "Trincado", df_desc_final["Trincado"].sum() if "Trincado" in df_desc_final.columns else 0),
+                ("Ninho Normal", "Ninho Normal", df_desc_final["Ninho Normal"].sum() if "Ninho Normal" in df_desc_final.columns else 0),
+                ("Cama", "Cama", df_desc_final["Cama"].sum() if "Cama" in df_desc_final.columns else 0),
+                ("Ninho Sujo", "Ninho Sujo", df_desc_final["Ninho Sujo"].sum() if "Ninho Sujo" in df_desc_final.columns else 0),
+                ("Deformado", "Deformado", df_desc_final["Deformado"].sum() if "Deformado" in df_desc_final.columns else 0),
+                ("Sujo Granja", "Sujo", df_desc_final["Sujo Granja"].sum() if "Sujo Granja" in df_desc_final.columns else 0),
+                ("Industrial", "Industrial", df_desc_final["Industrial"].sum() if "Industrial" in df_desc_final.columns else 0),
+                ("Duas Gemas", "Duas Gemas", df_desc_final["Duas Gemas"].sum() if "Duas Gemas" in df_desc_final.columns else 0),
+                ("Trincado", "Trincado", df_desc_final["Trincado"].sum() if "Trincado" in df_desc_final.columns else 0),
             ]
 
             linhas_validacao_desc = []
@@ -1422,7 +1176,56 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
                     "Status": "✅ OK" if diferenca == 0 else f"❌ Erro ({diferenca:+,})"
                 })
 
-            st.dataframe(pd.DataFrame(linhas_validacao_desc), use_container_width=True, hide_index=True)
+            df_val_desc = pd.DataFrame(linhas_validacao_desc)
+            tot_div_abs_desc = df_val_desc["Divergência"].abs().sum()
+
+            # CARDS ALINHADOS E ESPAÇADOS DE PONTA A PONTA
+            st.markdown(f"""
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; width: 100%; margin-top: 10px; margin-bottom: 24px;">
+                <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if tot_div_abs_desc == 0 else '#DC2626'}; padding: 20px 22px;">
+                    <div class="kpi-icon-bubble {'bubble-green' if tot_div_abs_desc == 0 else 'bubble-red'}">
+                        {'✓' if tot_div_abs_desc == 0 else '✕'}
+                    </div>
+                    <div>
+                        <p class="kpi-title">Balanço Total de Descartes</p>
+                        <p class="kpi-value" style="color: {'#16A34A' if tot_div_abs_desc == 0 else '#DC2626'}; font-size: 1.4rem;">
+                            {'✅ 100% Validado' if tot_div_abs_desc == 0 else f'❌ Divergência Real: {tot_div_abs_desc:,} ovos'}
+                        </p>
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">
+                            Total Esperado: {tot_esperado_geral:,.0f} | MTech: {tot_desc_m:,.0f}
+                        </p>
+                    </div>
+                </div>
+                <div class="kpi-card" style="padding: 20px 22px;">
+                    <div class="kpi-icon-bubble bubble-yellow">🥚</div>
+                    <div>
+                        <p class="kpi-title">Descartes do CPO (Fichas)</p>
+                        <p class="kpi-value" style="font-size: 1.3rem;">{tot_desc_esperado_cpo:,.0f}</p>
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">NN Perdidos + Avarias</p>
+                    </div>
+                </div>
+                <div class="kpi-card" style="padding: 20px 22px;">
+                    <div class="kpi-icon-bubble bubble-teal">🚜</div>
+                    <div>
+                        <p class="kpi-title">Descartes Galpão (Produção)</p>
+                        <p class="kpi-value" style="font-size: 1.3rem;">{tot_desc_galpao:,.0f}</p>
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Baixas Diretas na Coleta</p>
+                    </div>
+                </div>
+            </div>
+            """.replace(",", "."), unsafe_allow_html=True)
+
+            st.markdown("<h4 style='font-size: 16px;'>Comparativo Detalhado por Tipo de Ovo (Descartes & Perdas)</h4>", unsafe_allow_html=True)
+
+            df_val_desc.loc[len(df_val_desc)] = {
+                "Tipo de Ovo / Categoria": "TOTAIS GERAIS",
+                "Ficha CPO (Físico)": df_val_desc["Ficha CPO (Físico)"].sum(),
+                "MTech (Sistema)": df_val_desc["MTech (Sistema)"].sum(),
+                "Divergência": tot_div_abs_desc,
+                "Status": ""
+            }
+
+            st.dataframe(df_val_desc.style.apply(lambda x: ['font-weight: bold; background-color: #f1f5f9' if x.name == df_val_desc.index[-1] else '' for i in x], axis=1), use_container_width=True, hide_index=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1434,123 +1237,51 @@ elif tela == "📋 Validação de Reclassificação & Descartes":
             res_trinc.to_excel(writer, sheet_name="Resumo_Trincados", index=False)
             res_sujo.to_excel(writer, sheet_name="Resumo_Sujos", index=False)
 
-        st.download_button(
-            "📥 Baixar Ficha Formatada Completa (.xlsx)",
-            data=buf.getvalue(),
-            file_name="Ficha_Reclassificacao_Validada.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        st.download_button("📥 Baixar Ficha Formatada Completa (.xlsx)", data=buf.getvalue(), file_name="Ficha_Reclassificacao_Validada.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# ==============================================================================
-# TELA: VALIDAÇÃO DE EXPEDIÇÃO (VENDAS & TRANSFERÊNCIAS)
-# ==============================================================================
 elif tela == "🚚 Validação de Expedição (Vendas & Transferências)":
-    st.markdown("""
-    <div class="top-header-bar">
-        <div class="top-header-title">
-            <span>Saída de Cargas & Romaneios</span>
-            <h1>Validação de Expedição (Vendas & Transferências)</h1>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown('<div class="top-header-bar"><div class="top-header-title"><span>Saída de Cargas & Romaneios</span><h1>Validação de Expedição (Vendas & Transferências)</h1></div></div>', unsafe_allow_html=True)
     df_vendas = DatabaseManager.obter("df_vendas")
     df_transf = DatabaseManager.obter("df_transf")
-
     st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["Romaneios de Venda Externa", "Transferências OBI"])
     with tab1:
-        if df_vendas.empty:
-            show_warning("Nenhum romaneio de venda gravado no banco.")
-        else:
-            st.dataframe(df_vendas, use_container_width=True, hide_index=True)
+        if df_vendas.empty: show_warning("Nenhum romaneio de venda gravado no banco.")
+        else: st.dataframe(df_vendas, use_container_width=True, hide_index=True)
     with tab2:
-        if df_transf.empty:
-            show_warning("Nenhum romaneio de transferência gravado no banco.")
-        else:
-            st.dataframe(df_transf, use_container_width=True, hide_index=True)
+        if df_transf.empty: show_warning("Nenhum romaneio de transferência gravado no banco.")
+        else: st.dataframe(df_transf, use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 elif tela == "🏭 Produção Diária (MTech)":
-    st.markdown("""
-    <div class="top-header-bar">
-        <div class="top-header-title">
-            <span>Visão Galpões</span>
-            <h1>Apontamentos de Produção Diária (MTech ERP)</h1>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown('<div class="top-header-bar"><div class="top-header-title"><span>Visão Galpões</span><h1>Apontamentos de Produção Diária (MTech ERP)</h1></div></div>', unsafe_allow_html=True)
     df_p = DatabaseManager.obter("df_prod")
-    if df_p.empty:
-        show_warning("Nenhum dado de produção diária gravado no banco.")
+    if df_p.empty: show_warning("Nenhum dado de produção diária gravado no banco.")
     else:
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
         c_f1, c_f2 = st.columns(2)
-        with c_f1:
-            nucleos = ["Todos"] + sorted(list(df_p["Nome Fazenda"].unique()))
-            filtro_nuc = st.selectbox("Filtrar por Núcleo/Fazenda:", nucleos)
-        with c_f2:
-            lotes = ["Todos"] + sorted(list(df_p["Nº Lote"].unique()))
-            filtro_lot = st.selectbox("Filtrar por Lote:", lotes)
-
+        with c_f1: filtro_nuc = st.selectbox("Filtrar por Núcleo/Fazenda:", ["Todos"] + sorted(list(df_p["Nome Fazenda"].unique())))
+        with c_f2: filtro_lot = st.selectbox("Filtrar por Lote:", ["Todos"] + sorted(list(df_p["Nº Lote"].unique())))
         df_filtered = df_p.copy()
-        if filtro_nuc != "Todos":
-            df_filtered = df_filtered[df_filtered["Nome Fazenda"] == filtro_nuc]
-        if filtro_lot != "Todos":
-            df_filtered = df_filtered[df_filtered["Nº Lote"] == filtro_lot]
-
+        if filtro_nuc != "Todos": df_filtered = df_filtered[df_filtered["Nome Fazenda"] == filtro_nuc]
+        if filtro_lot != "Todos": df_filtered = df_filtered[df_filtered["Nº Lote"] == filtro_lot]
         cols_exib = [c for c in ["Data Produção", "Nome Fazenda", "Nº Lote", "Nome Produto", "Ovos", "Cód Ref", "Nº Rastreamento"] if c in df_filtered.columns]
         st.dataframe(df_filtered[cols_exib], use_container_width=True, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 elif tela == "🗑️ Descartes & Trincados":
-    st.markdown("""
-    <div class="top-header-bar">
-        <div class="top-header-title">
-            <span style="color: #DC2626 !important;">Auditoria de Perdas</span>
-            <h1>Central de Perdas, Descartes & Avarias</h1>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown('<div class="top-header-bar"><div class="top-header-title"><span style="color: #DC2626 !important;">Auditoria de Perdas</span><h1>Central de Perdas, Descartes & Avarias</h1></div></div>', unsafe_allow_html=True)
     df_reclass = DatabaseManager.obter("df_reclass")
-    if df_reclass.empty:
-        show_warning("Carregue a planilha de reclassificação na Central de Carga para visualizar.")
+    if df_reclass.empty: show_warning("Carregue a planilha de reclassificação na Central de Carga para visualizar.")
     else:
         df_desc = df_reclass[(df_reclass["Origem"] == "Ovos Perdidos (Aba)") | (df_reclass["Microtrincado"] > 0) | (df_reclass["P_NN"] > 0)].copy()
         tot_micro = df_reclass['Microtrincado'].sum()
-        
         cols_perda = ["P_NN", "P_Cama", "P_NS", "P_Def", "P_Sujo", "P_Ind", "P_DG", "P_Trinc"]
         tot_quebras = df_reclass[cols_perda].sum().sum()
-
-        descartes_kpi_html = f"""
-        <div class="kpi-container" style="grid-template-columns: repeat(2, 1fr);">
-            <div class="kpi-card">
-                <div class="kpi-icon-bubble bubble-yellow">🔍</div>
-                <div>
-                    <p class="kpi-title">Microtrincados (05)</p>
-                    <p class="kpi-value">{tot_micro:,.0f}</p>
-                    <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Passível de Comercialização</p>
-                </div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-icon-bubble bubble-red">🗑️</div>
-                <div>
-                    <p class="kpi-title">Quebras Físicas / Perdidos (Inclui NN)</p>
-                    <p class="kpi-value" style="color: #DC2626;">{tot_quebras:,.0f}</p>
-                    <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Perda Total Consolidada</p>
-                </div>
-            </div>
-        </div>
-        """.replace(",", ".")
+        descartes_kpi_html = f'<div class="kpi-container" style="grid-template-columns: repeat(2, 1fr);"><div class="kpi-card"><div class="kpi-icon-bubble bubble-yellow">🔍</div><div><p class="kpi-title">Microtrincados (05)</p><p class="kpi-value">{tot_micro:,.0f}</p><p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Passível de Comercialização</p></div></div><div class="kpi-card"><div class="kpi-icon-bubble bubble-red">🗑️</div><div><p class="kpi-title">Quebras Físicas / Perdidos (Inclui NN)</p><p class="kpi-value" style="color: #DC2626;">{tot_quebras:,.0f}</p><p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Perda Total Consolidada</p></div></div></div>'.replace(",", ".")
         st.markdown(descartes_kpi_html, unsafe_allow_html=True)
-
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
         st.subheader("Detalhamento por Data e Lote")
-        if not df_desc.empty:
-            df_desc_resumo = df_desc.groupby(["Data_Postura", "Lote"]).sum(numeric_only=True).reset_index()
-            st.dataframe(df_desc_resumo, use_container_width=True, hide_index=True)
-        else:
-            show_info("Nenhuma avaria registrada.")
+        if not df_desc.empty: st.dataframe(df_desc.groupby(["Data_Postura", "Lote"]).sum(numeric_only=True).reset_index(), use_container_width=True, hide_index=True)
+        else: show_info("Nenhuma avaria registrada.")
         st.markdown('</div>', unsafe_allow_html=True)
