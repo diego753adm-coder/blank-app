@@ -2,7 +2,6 @@ import io
 import os
 import re
 import sqlite3
-import base64
 from datetime import datetime
 import openpyxl
 import pandas as pd
@@ -38,12 +37,42 @@ class DatabaseManager:
             "df_est_sankhya", "df_est_cpo"
         ]
         with DatabaseManager._get_conn() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS config_parametros (
+                    chave TEXT PRIMARY KEY,
+                    valor REAL
+                )
+            """)
             for tab in tabelas:
                 try:
                     df_db = pd.read_sql(f"SELECT * FROM {tab}", conn)
                     st.session_state[tab] = df_db
                 except Exception:
                     st.session_state[tab] = pd.DataFrame()
+
+    @staticmethod
+    def obter_parametro(chave: str, valor_padrao: float = 2.380) -> float:
+        try:
+            with DatabaseManager._get_conn() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT valor FROM config_parametros WHERE chave = ?", (chave,))
+                row = cur.fetchone()
+                if row is not None:
+                    return float(row[0])
+        except Exception:
+            pass
+        return valor_padrao
+
+    @staticmethod
+    def salvar_parametro(chave: str, valor: float):
+        try:
+            with DatabaseManager._get_conn() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO config_parametros (chave, valor) VALUES (?, ?)",
+                    (chave, float(valor))
+                )
+        except Exception:
+            pass
 
     @staticmethod
     def salvar(nome_tabela: str, df_novo: pd.DataFrame):
@@ -98,21 +127,41 @@ DatabaseManager.inicializar()
 # 2. SISTEMA DE AVISOS VISUAIS
 # ==============================================================================
 def show_warning(msg):
-    st.markdown(f'<div style="background-color: #FFFBEB; border: 1px solid #FEF3C7; border-left: 6px solid #F59E0B; padding: 14px 18px; border-radius: 8px; color: #92400E; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">⚠️ &nbsp; {msg}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: #FFFBEB; border: 1px solid #FEF3C7; border-left: 6px solid #F59E0B; padding: 14px 18px; border-radius: 8px; color: #92400E; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">⚠️ &nbsp; {msg}</div>', unsafe_allow_html=True)
 
 def show_info(msg):
-    st.markdown(f'<div style="background-color: #EFF6FF; border: 1px solid #DBEAFE; border-left: 6px solid #3B82F6; padding: 14px 18px; border-radius: 8px; color: #1E3A8A; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">ℹ️ &nbsp; {msg}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: #EFF6FF; border: 1px solid #DBEAFE; border-left: 6px solid #3B82F6; padding: 14px 18px; border-radius: 8px; color: #1E3A8A; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">ℹ️ &nbsp; {msg}</div>', unsafe_allow_html=True)
 
 def show_success(msg):
-    st.markdown(f'<div style="background-color: #F0FDF4; border: 1px solid #DCFCE7; border-left: 6px solid #22C55E; padding: 14px 18px; border-radius: 8px; color: #166534; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">✅ &nbsp; {msg}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: #F0FDF4; border: 1px solid #DCFCE7; border-left: 6px solid #22C55E; padding: 14px 18px; border-radius: 8px; color: #166534; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">✅ &nbsp; {msg}</div>', unsafe_allow_html=True)
 
 def show_error(msg):
-    st.markdown(f'<div style="background-color: #FEF2F2; border: 1px solid #FEE2E2; border-left: 6px solid #EF4444; padding: 14px 18px; border-radius: 8px; color: #991B1B; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">❌ &nbsp; {msg}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: #FEF2F2; border: 1px solid #FEE2E2; border-left: 6px solid #EF4444; padding: 14px 18px; border-radius: 8px; color: #991B1B; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">❌ &nbsp; {msg}</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. ESTILO VISUAL RESPONSIVO & PAINEL LATERAL
+# 3. ÍCONES VETORIAIS SVG
 # ==============================================================================
-st.set_page_config(page_title="Hub Operacional de Ovos", page_icon="🥚", layout="wide", initial_sidebar_state="expanded")
+SVG_ICONS = {
+    "dashboard": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
+    "boxes": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+    "cart": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>',
+    "egg": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8 2 4 8 4 14a8 8 0 0 0 16 0c0-6-4-12-8-12Z"/></svg>',
+    "trend": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+    "tag": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg>',
+    "upload": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
+    "factory": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>',
+    "clipboard": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>',
+    "trash": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+    "truck": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18.5" r="2.5"/><circle cx="7" cy="18.5" r="2.5"/></svg>',
+    "check": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#16A34A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    "x": '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    "grid": '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>'
+}
+
+# ==============================================================================
+# 4. ESTILO VISUAL RESPONSIVO, CSS GLOBAL E CONTRASTE DARK/LIGHT
+# ==============================================================================
+st.set_page_config(page_title="Granja 117 - Controle Operacional", page_icon="🥚", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
@@ -135,23 +184,31 @@ st.markdown("""
     }
 
     .stSelectbox label p, .stNumberInput label p, .stFileUploader label p {
-        font-size: 15.5px !important; font-weight: 700 !important; color: var(--text-color) !important;
+        font-size: 15px !important; font-weight: 700 !important; color: var(--text-color) !important;
     }
     div[data-baseweb="select"] span, input { font-size: 14.5px !important; }
 
+    /* Barra Lateral com Tema Escuro */
     section[data-testid="stSidebar"] {
         background-color: #132517 !important;
         border-right: 1px solid #0E1B11 !important;
     }
     section[data-testid="stSidebar"] * { color: #E2E8F0 !important; }
     
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] label p,
+    section[data-testid="stSidebar"] .stNumberInput label p,
+    section[data-testid="stSidebar"] .stSelectbox label p {
+        color: #F8FAFC !important;
+    }
+
     .brand-box {
         background: #132517;
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
-        padding: 14px 16px;
+        padding: 12px 14px;
         margin-top: -20px !important;
-        margin-bottom: 25px;
+        margin-bottom: 22px;
         display: flex;
         align-items: center;
         gap: 14px;
@@ -159,13 +216,14 @@ st.markdown("""
         box-sizing: border-box;
     }
     .brand-title { font-size: 1.05rem; font-weight: 800; color: #FFFFFF !important; margin: 0; }
-    .brand-sub { font-size: 0.78rem; color: #94A3B8 !important; font-weight: 600; text-transform: uppercase; }
+    .brand-sub { font-size: 0.78rem; color: #86EFAC !important; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
     .nav-label {
         font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800;
         color: #84A98C !important; margin: 18px 4px 12px 4px;
     }
 
+    /* Itens de Navegação com Ícones Dedicados */
     section[data-testid="stSidebar"] div[data-testid="stRadio"] { width: 100% !important; }
     section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] {
         display: flex !important; flex-direction: column !important; align-items: stretch !important; width: 100% !important; gap: 10px !important;
@@ -176,35 +234,131 @@ st.markdown("""
         min-height: 48px !important; height: auto !important; padding: 10px 16px !important; margin: 0 !important;
         width: 100% !important; display: flex !important; align-items: center !important; cursor: pointer !important;
     }
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:hover { background-color: #25442A !important; border: 1px solid #4ADE80 !important; }
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) { background-color: #204428 !important; border-left: 5px solid #4ADE80 !important; }
+    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:hover { 
+        background-color: #25442A !important; border: 1px solid #4ADE80 !important; 
+    }
+    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) { 
+        background-color: #204428 !important; border-left: 5px solid #4ADE80 !important; 
+    }
     section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label p {
         color: #E2E8F0 !important; font-size: 0.95rem !important; font-weight: 600 !important; margin: 0 !important; width: 100% !important;
+        display: flex !important; align-items: center !important;
     }
 
-    section[data-testid="stSidebar"] input { background-color: #1B3621 !important; color: #FFFFFF !important; border: 1px solid #2B5433 !important; border-radius: 6px !important; padding: 10px !important; width: 100%; box-sizing: border-box; }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > div:nth-child(1) label p::before {
+        content: ""; display: inline-block; width: 20px; height: 20px; min-width: 20px; margin-right: 12px;
+        background-color: #4ADE80;
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>') no-repeat center / contain;
+        mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>') no-repeat center / contain;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > div:nth-child(2) label p::before {
+        content: ""; display: inline-block; width: 20px; height: 20px; min-width: 20px; margin-right: 12px;
+        background-color: #4ADE80;
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>') no-repeat center / contain;
+        mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>') no-repeat center / contain;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > div:nth-child(3) label p::before {
+        content: ""; display: inline-block; width: 20px; height: 20px; min-width: 20px; margin-right: 12px;
+        background-color: #4ADE80;
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>') no-repeat center / contain;
+        mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>') no-repeat center / contain;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > div:nth-child(4) label p::before {
+        content: ""; display: inline-block; width: 20px; height: 20px; min-width: 20px; margin-right: 12px;
+        background-color: #4ADE80;
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>') no-repeat center / contain;
+        mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>') no-repeat center / contain;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > div:nth-child(5) label p::before {
+        content: ""; display: inline-block; width: 20px; height: 20px; min-width: 20px; margin-right: 12px;
+        background-color: #4ADE80;
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>') no-repeat center / contain;
+        mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>') no-repeat center / contain;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] > div:nth-child(6) label p::before {
+        content: ""; display: inline-block; width: 20px; height: 20px; min-width: 20px; margin-right: 12px;
+        background-color: #4ADE80;
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18.5" r="2.5"/><circle cx="7" cy="18.5" r="2.5"/></svg>') no-repeat center / contain;
+        mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18.5" r="2.5"/><circle cx="7" cy="18.5" r="2.5"/></svg>') no-repeat center / contain;
+    }
 
-    .cotacao-sidebar-card { background: #1A3620; border: 1px solid #2B5433; border-radius: 10px; padding: 14px 16px; margin-top: 18px; width: 100%; box-sizing: border-box; }
-    .cotacao-sidebar-tag { font-size: 0.70rem; font-weight: 700; text-transform: uppercase; color: #84A98C !important; }
+    section[data-testid="stSidebar"] input { 
+        background-color: #1B3621 !important; color: #FFFFFF !important; border: 1px solid #2B5433 !important; 
+        border-radius: 6px !important; padding: 10px !important; width: 100%; box-sizing: border-box; 
+    }
+
+    .cotacao-sidebar-card { 
+        background: #1A3620; border: 1px solid #2B5433; border-radius: 10px; padding: 14px 16px; 
+        margin-top: 18px; width: 100%; box-sizing: border-box; 
+    }
+    .cotacao-sidebar-tag { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: #86EFAC !important; }
     .cotacao-sidebar-val { font-size: 1.35rem; font-weight: 800; color: #FFFFFF !important; margin-top: 4px; }
 
     .saas-panel { 
-        background-color: var(--background-color) !important; 
-        border: 1px solid var(--secondary-background-color) !important; 
+        background-color: var(--secondary-background-color) !important; 
+        border: 1px solid rgba(128, 128, 128, 0.2) !important; 
         border-radius: 12px !important; 
         padding: clamp(14px, 2vw, 24px) !important; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.03) !important; 
         margin-bottom: 24px !important; 
         box-sizing: border-box !important;
         width: 100% !important;
     }
 
-    div[data-testid="stDataFrame"] div, div[data-testid="stDataFrame"] span, div[data-testid="stDataFrame"] p { 
-        font-size: 14.5px !important; 
-        color: #0F172A !important; 
+    /* CABEÇALHO EXECUTIVO SUPERIOR */
+    .top-header-card {
+        background: var(--secondary-background-color);
+        border: 1px solid rgba(128, 128, 128, 0.2);
+        border-left: 6px solid #16A34A;
+        border-radius: 12px;
+        padding: 18px 24px;
+        margin-bottom: 22px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.03);
     }
-    th.col_heading, th.row_heading { color: #0F172A !important; font-weight: 800 !important; }
+    .top-header-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+    .top-header-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        background: rgba(22, 163, 74, 0.12);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .top-header-title {
+        font-size: 22px;
+        font-weight: 800;
+        margin: 0;
+        line-height: 1.2;
+        color: var(--text-color);
+    }
+    .top-header-subtitle {
+        font-size: 13px;
+        color: #94A3B8;
+        margin-top: 4px;
+        margin-bottom: 0;
+        font-weight: 500;
+    }
+    .top-header-pill {
+        background: rgba(128, 128, 128, 0.12);
+        border: 1px solid rgba(128, 128, 128, 0.2);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-color);
+        white-space: nowrap;
+    }
 
+    /* CARDS DE KPI COM CONTRASTE DINÂMICO */
     .kpi-container { 
         display: grid !important; 
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important; 
@@ -215,71 +369,80 @@ st.markdown("""
     }
 
     .kpi-card { 
-        background: var(--background-color); 
-        border: 1px solid var(--secondary-background-color); 
+        background: var(--secondary-background-color); 
+        border: 1px solid rgba(128, 128, 128, 0.2); 
         border-radius: 12px; 
         padding: 16px 18px; 
-        box-shadow: 0 3px 5px rgba(0,0,0,0.04); 
+        box-shadow: 0 3px 5px rgba(0,0,0,0.03); 
         display: flex; 
         align-items: center; 
-        gap: 14px; 
+        gap: 16px; 
         width: 100%; 
         box-sizing: border-box; 
         min-width: 0;
     }
     
-    /* Novo estilo de bolha neutra e limpa para os ícones */
-    .kpi-icon-bubble { 
-        width: 48px; 
-        height: 48px; 
-        border-radius: 12px; 
-        display: flex; 
-        align-items: center; 
-        justify-content: center; 
-        font-size: 1.4rem; 
-        flex-shrink: 0; 
-        background-color: #F8FAFC; 
-        border: 1px solid #E2E8F0;
-        color: #475569;
+    .kpi-svg-box { 
+        width: 44px !important; 
+        height: 44px !important; 
+        min-width: 44px !important;
+        display: flex !important; 
+        align-items: center !important; 
+        justify-content: center !important; 
+        flex-shrink: 0 !important; 
+        background: rgba(128, 128, 128, 0.12) !important; 
+        border-radius: 10px !important;
+        color: var(--text-color) !important;
+    }
+    .kpi-svg-box svg {
+        width: 24px !important;
+        height: 24px !important;
+        display: block !important;
     }
     
-    .kpi-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--text-color); opacity: 0.7; margin: 0; }
+    .kpi-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--text-color); opacity: 0.75; margin: 0; }
     .kpi-value { font-size: clamp(1.25rem, 2.2vw, 1.55rem); font-weight: 800; color: var(--text-color); margin: 2px 0 0 0; word-break: break-word; }
     .kpi-sub { font-size: 0.80rem; font-weight: 600; margin: 4px 0 0 0; }
 
-    .top-header-bar { 
-        display: flex; 
-        flex-wrap: wrap; 
-        justify-content: space-between; 
-        align-items: center; 
-        gap: 12px;
-        margin-bottom: 22px; 
-        padding-bottom: 16px; 
-        border-bottom: 2px solid var(--secondary-background-color); 
-    }
-    .top-header-title h1 { 
-        font-size: clamp(1.3rem, 2.5vw, 1.7rem) !important; 
-        font-weight: 800 !important; 
-        color: var(--text-color) !important; 
-        margin: 0 !important; 
-    }
-    .top-header-title span { font-size: 0.85rem !important; font-weight: 700 !important; color: #527958 !important; text-transform: uppercase !important; }
-    
     .table-container-responsive {
         overflow-x: auto; 
         width: 100%; 
         border-radius: 10px; 
-        border: 1px solid #CBD5E1; 
+        border: 1px solid rgba(128, 128, 128, 0.25); 
         margin-bottom: 22px;
         -webkit-overflow-scrolling: touch;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# ==============================================================================
-# 4. REGRAS DE NEGÓCIO E PADRONIZAÇÃO (MAPAS)
-# ==============================================================================
+def render_top_header(title, subtitle, icon_key="dashboard", pill_text=None):
+    svg = SVG_ICONS.get(icon_key, SVG_ICONS["dashboard"])
+    pill_html = f'<div class="top-header-pill">{pill_text}</div>' if pill_text else ''
+    st.markdown(f"""
+    <div class="top-header-card">
+        <div class="top-header-left">
+            <div class="top-header-icon">{svg}</div>
+            <div>
+                <h1 class="top-header-title">{title}</h1>
+                <p class="top-header-subtitle">{subtitle}</p>
+            </div>
+        </div>
+        {pill_html}
+    </div>
+    """, unsafe_allow_html=True)
 
+def render_section_title(icon_key, title_text):
+    svg = SVG_ICONS.get(icon_key, "")
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px; margin-bottom: 14px;">
+        <div style="width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;">{svg}</div>
+        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: var(--text-color);">{title_text}</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ==============================================================================
+# 5. REGRAS DE NEGÓCIO E PADRONIZAÇÃO (MAPAS)
+# ==============================================================================
 MAP_SANKHYA = {
     "OVO FERTIL - NN": "01-OVO NINHO NORMAL",
     "OVO FERTIL - NS": "02-OVO NINHO SUJO",
@@ -318,23 +481,9 @@ MAP_CPO = {
     "LP": "13-OVO LIMPO GJA"
 }
 
-PADRAO_OBI = [
-    "01-OVO NINHO NORMAL", 
-    "02-OVO NINHO SUJO", 
-    "03-OVO DE CAMA"
-]
-
-PADRAO_COMERCIAL = [
-    "04-OVO DUAS GEMAS GJA", 
-    "05-OVO TRINCADO GJA", 
-    "06-OVO SUJO GJA", 
-    "08-OVO INDUSTRIAL GJA", 
-    "12-OVO DEFORMADO GJA", 
-    "13-OVO LIMPO GJA"
-]
-
+PADRAO_OBI = ["01-OVO NINHO NORMAL", "02-OVO NINHO SUJO", "03-OVO DE CAMA"]
+PADRAO_COMERCIAL = ["04-OVO DUAS GEMAS GJA", "05-OVO TRINCADO GJA", "06-OVO SUJO GJA", "08-OVO INDUSTRIAL GJA", "12-OVO DEFORMADO GJA", "13-OVO LIMPO GJA"]
 PADRAO_ORDEM = PADRAO_OBI + PADRAO_COMERCIAL + ["09-OVO PERDIDO"]
-
 
 def encurtar_nome_coluna(col_name):
     texto = str(col_name)
@@ -467,23 +616,30 @@ def parse_reclassificacao_cpo(file_bytes):
 
 def parse_producao_erp(file_bytes):
     df = pd.read_excel(io.BytesIO(file_bytes))
+    if df.shape[1] < 3:
+        df = pd.read_excel(io.BytesIO(file_bytes), header=1)
     df.columns = [str(c).strip() for c in df.columns]
     
     faz_col = next((c for c in df.columns if "FAZENDA" in c.upper()), "Nome Fazenda")
     lote_col = next((c for c in df.columns if "LOTE" in c.upper()), "Nº Lote")
-    prod_col = next((c for c in df.columns if "PRODUTO" in c.upper()), "Nome Produto")
-    ovos_col = next((c for c in df.columns if "OVO" in c.upper()), "Ovos")
-    dt_col = next((c for c in df.columns if "PRODU" in c.upper() or "DATA" in c.upper()), "Data Produção")
+    
+    dt_col = next((c for c in df.columns if ("DATA" in c.upper() and "TRANS" not in c.upper() and "MOV" not in c.upper()) or c.upper() in ["DATA PRODUÇÃO", "DATA PRODUCAO"]), None)
+    if not dt_col:
+        dt_col = next((c for c in df.columns if "DATA" in c.upper() or "DT" in c.upper()), "Data Produção")
+
+    prod_col = next((c for c in df.columns if c != dt_col and ("PRODUTO" in c.upper() or "ITEM" in c.upper() or "DESCR" in c.upper())), "Nome Produto")
+    ovos_col = next((c for c in df.columns if ("OVO" in c.upper() and "TRANS" not in c.upper() and "COD" not in c.upper()) or "QUANT" in c.upper() or "QTD" in c.upper()), "Ovos")
 
     df = df.dropna(subset=[lote_col, ovos_col])
-    df["Nome Fazenda"] = df[faz_col].astype(str) if faz_col in df.columns else "Balsas 117"
+    df["Nome Fazenda"] = df[faz_col].astype(str).str.strip() if faz_col in df.columns else "Granja 117"
     df["Nº Lote"] = df[lote_col].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
-    df["Nome Produto"] = df[prod_col].astype(str)
+    df["Nome Produto"] = df[prod_col].astype(str).str.strip() if prod_col in df.columns else ""
     df["Ovos"] = pd.to_numeric(df[ovos_col], errors="coerce").fillna(0).astype(int)
-    df["Data Produção"] = df[dt_col].apply(normalizar_data_str)
+    df["Data Produção"] = df[dt_col].apply(normalizar_data_str) if dt_col in df.columns else ""
     
     cols_agrupar = ["Nome Fazenda", "Nº Lote", "Nome Produto", "Data Produção"]
-    df = df.groupby(cols_agrupar, dropna=False, as_index=False)["Ovos"].sum()
+    cols_validas = [c for c in cols_agrupar if c in df.columns]
+    df = df.groupby(cols_validas, dropna=False, as_index=False)["Ovos"].sum()
     return df
 
 def parse_reclassificacao_mtech(file_bytes):
@@ -579,9 +735,12 @@ def parse_estoque_mtech(file_bytes):
     prod_col = next((c for c in df.columns if "NOME PRODUTO" in c or "PRODUTO" in c), "NOME PRODUTO")
     qtd_col = next((c for c in df.columns if "OVOS" in c or "QTD" in c), "OVOS")
     
-    res = pd.DataFrame()
-    res["Produto_Original"] = df[prod_col].astype(str).str.strip()
-    res["Quantidade"] = pd.to_numeric(df[qtd_col], errors="coerce").fillna(0).astype(int)
+    df[prod_col] = df[prod_col].astype(str).str.strip()
+    df[qtd_col] = pd.to_numeric(df[qtd_col], errors="coerce").fillna(0).astype(int)
+    
+    # Soma todas as linhas do mesmo produto (garante 382 para Industrial, sem descarte de linhas com qtd diferente)
+    res = df.groupby(prod_col, as_index=False)[qtd_col].sum()
+    res.columns = ["Produto_Original", "Quantidade"]
     return res[res["Quantidade"] != 0]
 
 def parse_sankhya(file_bytes):
@@ -711,28 +870,81 @@ def inspecionar_e_processar_conteudo(uploaded_file):
     raise ValueError(f"Estrutura de ficheiro não reconhecida. Colunas: {cols_upper}")
 
 # ==============================================================================
-# 5. RENDERIZADORES DE TABELA HTML FORMATADA (COM SCROLL RESPONSIVO)
+# 6. RENDERIZADORES DE TABELA HTML
 # ==============================================================================
+def render_matriz_producao_html(df_pivot):
+    cols = list(df_pivot.columns)
+    headers_html = "".join([f'<th style="padding: 10px 14px; text-align: center !important; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 800; font-size: 13.5px; color: var(--text-color);">{col}</th>' for col in cols])
+    
+    rows_html = []
+    for idx, (prod_nome, row) in enumerate(df_pivot.iterrows()):
+        is_total_row = (str(prod_nome).strip().upper() == "TOTAL")
+        
+        if is_total_row:
+            row_style = "background-color: #334155 !important; color: #FFFFFF !important; font-weight: 800; border-top: 2px solid rgba(128,128,128,0.4);"
+            prod_cell_style = "padding: 10px 14px; text-align: left !important; font-weight: 800; border-right: 2px solid rgba(128,128,128,0.4); color: #FFFFFF !important;"
+        else:
+            bg = "rgba(128, 128, 128, 0.04)" if idx % 2 == 0 else "transparent"
+            row_style = f"background-color: {bg}; border-bottom: 1px solid rgba(128,128,128,0.15);"
+            prod_cell_style = "padding: 10px 14px; text-align: left !important; font-weight: 800; border-right: 2px solid rgba(128,128,128,0.25); color: var(--text-color) !important;"
+            
+        cells_html = []
+        for c_idx, col in enumerate(cols):
+            val = row.iloc[c_idx]
+            try:
+                val_int = int(float(val)) if pd.notnull(val) else 0
+            except Exception:
+                val_int = 0
+            val_str = f"{val_int:,}".replace(",", ".")
+            is_total_col = (str(col).strip().upper() == "TOTAL")
+            
+            if is_total_row:
+                td_style = "padding: 10px 14px; text-align: center !important; font-weight: 800; color: #FFFFFF !important; border-right: 1px solid #475569;"
+            elif is_total_col:
+                td_style = "padding: 10px 14px; text-align: center !important; font-weight: 800; background-color: rgba(128,128,128,0.12); border-left: 2px solid rgba(128,128,128,0.3); color: var(--text-color) !important;"
+            else:
+                td_style = "padding: 10px 14px; text-align: center !important; border-right: 1px solid rgba(128,128,128,0.15); color: var(--text-color) !important; font-weight: 600;"
+                
+            cells_html.append(f'<td style="{td_style}">{val_str}</td>')
+            
+        rows_html.append(f'<tr style="{row_style}"><td style="{prod_cell_style}">{prod_nome}</td>{"".join(cells_html)}</tr>')
+        
+    return f'''
+    <div class="table-container-responsive">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px; text-align: center;">
+            <thead>
+                <tr style="background-color: var(--secondary-background-color); border-bottom: 2px solid rgba(128,128,128,0.3);">
+                    <th style="padding: 12px 14px; text-align: left !important; border-right: 2px solid rgba(128,128,128,0.3); font-weight: 800; color: var(--text-color);">Nome Produto</th>
+                    {headers_html}
+                </tr>
+            </thead>
+            <tbody>
+                {"".join(rows_html)}
+            </tbody>
+        </table>
+    </div>
+    '''
+
 def render_reclass_table_html(df):
     rows_html = []
     for idx, r in df.iterrows():
-        bg = "#F9FBFA" if idx % 2 == 0 else "#FFFFFF"
-        origem_color = "#1E40AF" if r["Origem"] == "Ninho Normal" else ("#B45309" if r["Origem"] == "Cama" else "#065F46")
+        bg = "rgba(128, 128, 128, 0.04)" if idx % 2 == 0 else "transparent"
+        origem_color = "#3B82F6" if r["Origem"] == "Ninho Normal" else ("#F59E0B" if r["Origem"] == "Cama" else "#10B981")
         row_str = (
-            f'<tr style="background-color: {bg}; border-bottom: 1px solid #E2E8F0; color: #1E293B; font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; border-right: 1px solid #E2E8F0;">{r["Data_Postura"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid #CBD5E1;">{r["Lote"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; color: {origem_color}; border-right: 1px solid #E2E8F0;">{r["Origem"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid #CBD5E1;">{r["Saldo_Inicial"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Sujo"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Deformado"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Ninho_Sujo"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Industrial"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Duas_Gemas"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0; font-weight: 600;">{r["Ovo_Limpo"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid #CBD5E1; color: #1E293B;">{r["Trincado"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: #F1F5F9; border-right: 1px solid #E2E8F0;">{r["Total_Destinos"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: ' + ("#FEF2F2" if r["Saldo_Final"] > 0 else "#ECFDF5") + '; color: ' + ("#991B1B" if r["Saldo_Final"] > 0 else "#065F46") + f';">{r["Saldo_Final"]:,}'.replace(",", ".") + f'</td>'
+            f'<tr style="background-color: {bg}; border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 14.5px;">'
+            f'<td style="padding: 10px 12px; border-right: 1px solid rgba(128,128,128,0.2);">{r["Data_Postura"]}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid rgba(128,128,128,0.3);">{r["Lote"]}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; color: {origem_color}; border-right: 1px solid rgba(128,128,128,0.2);">{r["Origem"]}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{r["Saldo_Inicial"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Sujo"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Deformado"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Ninho_Sujo"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Industrial"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Duas_Gemas"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Ovo_Limpo"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{r["Trincado"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: rgba(128,128,128,0.1); border-right: 1px solid rgba(128,128,128,0.2);">{r["Total_Destinos"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; color: ' + ("#EF4444" if r["Saldo_Final"] > 0 else "#22C55E") + f';">{r["Saldo_Final"]:,}'.replace(",", ".") + f'</td>'
             f'</tr>'
         )
         rows_html.append(row_str)
@@ -742,16 +954,16 @@ def render_reclass_table_html(df):
     t_dest, t_fim = df["Total_Destinos"].sum(), df["Saldo_Final"].sum()
 
     row_total = (
-        f'<tr style="background-color: #1E293B; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
-        f'<td colspan="3" style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">TOTAL GERAL DA SELEÇÃO</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{t_saldo:,}</td>'
+        f'<tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
+        f'<td colspan="3" style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">TOTAL GERAL DA SELEÇÃO</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{t_saldo:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_sujo:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_def:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_ns:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_ind:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_dg:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_limpo:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{t_trinc:,}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{t_trinc:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_dest:,}</td>'
         f'<td style="padding: 12px; text-align: right;">{t_fim:,}</td>'
         f'</tr>'
@@ -792,20 +1004,20 @@ def render_reclass_table_html(df):
 def render_descarte_table_html(df):
     rows_html = []
     for idx, r in df.iterrows():
-        bg = "#F9FBFA" if idx % 2 == 0 else "#FFFFFF"
+        bg = "rgba(128, 128, 128, 0.04)" if idx % 2 == 0 else "transparent"
         rows_html.append(
-            f'<tr style="background-color: {bg}; border-bottom: 1px solid #FEE2E2; color: #1E293B; font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; border-right: 1px solid #FEE2E2;">{r["Data_Postura"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid #CBD5E1;">{r["Lote"]}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 800; color: #1E3A8A;">{r["Ninho Normal"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Cama"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Ninho Sujo"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Deformado"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Sujo Granja"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Industrial"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 600;">{r["Duas Gemas"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #FEE2E2; font-weight: 800; color: #1E293B;">{r["Trincado"]:,}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; color: #991B1B; border-left: 2px solid #CBD5E1;">{r["TOTAL BAIXA"]:,}</td>'
+            f'<tr style="background-color: {bg}; border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 14.5px;">'
+            f'<td style="padding: 10px 12px; border-right: 1px solid rgba(128,128,128,0.2);">{r["Data_Postura"]}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid rgba(128,128,128,0.3);">{r["Lote"]}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 800; color: #3B82F6;">{r["Ninho Normal"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Cama"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Ninho Sujo"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Deformado"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Sujo Granja"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Industrial"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Duas Gemas"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 800;">{r["Trincado"]:,}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; border-left: 2px solid rgba(128,128,128,0.3); background-color: rgba(128,128,128,0.1);">{r["TOTAL BAIXA"]:,}</td>'
             f'</tr>'.replace(",", ".")
         )
     
@@ -815,7 +1027,7 @@ def render_descarte_table_html(df):
     
     row_total = (
         f'<tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
-        f'<td colspan="2" style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">TOTAIS GERAIS DA SELEÇÃO</td>'
+        f'<td colspan="2" style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">TOTAIS GERAIS DA SELEÇÃO</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_nn:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_cama:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_ns:,}</td>'
@@ -823,8 +1035,8 @@ def render_descarte_table_html(df):
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_sujog:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_ind:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_dg:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B; color: #FCA5A5;">{t_trinc:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-left: 2px solid #CBD5E1;">{t_total:,}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_trinc:,}</td>'
+        f'<td style="padding: 12px; text-align: right; border-left: 2px solid rgba(128,128,128,0.3); background-color: #475569;">{t_total:,}</td>'
         f'</tr>'.replace(",", ".")
     )
     
@@ -843,7 +1055,7 @@ def render_descarte_table_html(df):
         '<th style="padding: 10px; border-right: 1px solid #64748B;">Industrial</th>'
         '<th style="padding: 10px; border-right: 1px solid #64748B;">Duas Gemas</th>'
         '<th style="padding: 10px; border-right: 2px solid white; background-color: #166534;">Trincado</th>'
-        '<th style="padding: 10px; background-color: #991B1B;">TOTAL BAIXA</th>'
+        '<th style="padding: 10px; background-color: #334155;">TOTAL BAIXA</th>'
         '</tr>'
         '</thead>'
         f'<tbody>{"".join(rows_html) + row_total}</tbody>'
@@ -854,16 +1066,16 @@ def render_descarte_table_html(df):
 def render_estoque_sankhya_mtech_html(df):
     rows_html = []
     for idx, r in df.iterrows():
-        bg = "#F9FBFA" if idx % 2 == 0 else "#FFFFFF"
+        bg = "rgba(128, 128, 128, 0.04)" if idx % 2 == 0 else "transparent"
         div_val = r["Divergencia Qtd"]
-        div_color = "#166534" if div_val == 0 else "#991B1B"
-        div_bg = "transparent" if div_val == 0 else "#FEF2F2"
+        div_color = "#22C55E" if div_val == 0 else "#EF4444"
+        div_bg = "transparent" if div_val == 0 else "rgba(239, 68, 68, 0.1)"
         
         row_str = (
-            f'<tr style="background-color: {bg}; border-bottom: 1px solid #E2E8F0; color: #1E293B; font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 1px solid #E2E8F0; text-align: left;">{r["Nome Padrao"]}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0;">{r["Qtd MTech"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 2px solid #CBD5E1;">{r["Qtd Sankhya"]:,}</td>'
+            f'<tr style="background-color: {bg}; border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 14.5px;">'
+            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 1px solid rgba(128,128,128,0.2); text-align: left;">{r["Nome Padrao"]}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2);">{r["Qtd MTech"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{r["Qtd Sankhya"]:,}</td>'
             f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: {div_bg}; color: {div_color};">{div_val:,}</td>'
             f'</tr>'
         )
@@ -874,7 +1086,7 @@ def render_estoque_sankhya_mtech_html(df):
     t_div = df["Divergencia Qtd"].sum()
     
     row_total = (
-        f'<tr style="background-color: #1E293B; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
+        f'<tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
         f'<td style="padding: 12px; text-align: left; border-right: 1px solid #CBD5E1;">Total</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_mtech:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{t_sank:,}</td>'
@@ -901,16 +1113,16 @@ def render_estoque_sankhya_mtech_html(df):
 def render_estoque_cpo_sankhya_html(df):
     rows_html = []
     for idx, r in df.iterrows():
-        bg = "#F9FBFA" if idx % 2 == 0 else "#FFFFFF"
+        bg = "rgba(128, 128, 128, 0.04)" if idx % 2 == 0 else "transparent"
         div_val = r["Divergencia CPO"]
-        div_color = "#166534" if div_val == 0 else "#991B1B"
-        div_bg = "transparent" if div_val == 0 else "#FEF2F2"
+        div_color = "#22C55E" if div_val == 0 else "#EF4444"
+        div_bg = "transparent" if div_val == 0 else "rgba(239, 68, 68, 0.1)"
         
         row_str = (
-            f'<tr style="background-color: {bg}; border-bottom: 1px solid #E2E8F0; color: #1E293B; font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 1px solid #E2E8F0; text-align: left;">{r["Nome Padrao"]}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid #E2E8F0;">{r["Qtd Sankhya"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 2px solid #CBD5E1;">{r["Qtd CPO"]:,}</td>'
+            f'<tr style="background-color: {bg}; border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 14.5px;">'
+            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 1px solid rgba(128,128,128,0.2); text-align: left;">{r["Nome Padrao"]}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2);">{r["Qtd Sankhya"]:,}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{r["Qtd CPO"]:,}</td>'
             f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: {div_bg}; color: {div_color};">{div_val:,}</td>'
             f'</tr>'
         )
@@ -921,7 +1133,7 @@ def render_estoque_cpo_sankhya_html(df):
     t_div = df["Divergencia CPO"].sum()
     
     row_total = (
-        f'<tr style="background-color: #1E293B; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
+        f'<tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
         f'<td style="padding: 12px; text-align: left; border-right: 1px solid #CBD5E1;">Total</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_sank:,}</td>'
         f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{t_cpo:,}</td>'
@@ -946,14 +1158,13 @@ def render_estoque_cpo_sankhya_html(df):
     return table_html
 
 # ==============================================================================
-# 6. MENU LATERAL EXECUTIVO
+# 7. MENU LATERAL EXECUTIVO
 # ==============================================================================
-def obter_logo_b64():
-    return "https://media.licdn.com/dms/image/v2/D4D0BAQE8aP53G2wHSA/company-logo_200_200/company-logo_200_200/0/1691157833055/natto_alimentos_logo?e=2147483647&v=beta&t=HXY2xK7O4JzVz0j5Z_WjB8OqC0fWc_8X9K3Lz8EwPjQ"
+LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTe-sPP0AXsRUDhgN4R-IuHGi-b4iZTFGtyh8Ua9OLP_w&s=10"
 
 st.sidebar.markdown(f"""
 <div class="brand-box">
-    <img src="{obter_logo_b64()}" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2);">
+    <img src="{LOGO_URL}" style="width: 44px; height: 44px; border-radius: 8px; object-fit: contain; background: #ffffff; padding: 3px; border: 1px solid rgba(255,255,255,0.2);">
     <div>
         <p class="brand-title">Granja - 117</p>
         <span class="brand-sub">Controle Operacional</span>
@@ -963,21 +1174,34 @@ st.sidebar.markdown(f"""
 
 st.sidebar.markdown('<div class="nav-label">Menu de Navegação</div>', unsafe_allow_html=True)
 
+OPCOES_MENU = [
+    "Dashboard",
+    "Central de Carga de Arquivos",
+    "Produção Diária (MTech)",
+    "Validação de Reclassificação",
+    "Validação de Descartes",
+    "Validação Estoque (MTech x Sankhya x CPO)"
+]
+
 tela = st.sidebar.radio(
     "Navegação:",
-    [
-        "📊 Dashboard",
-        "📥 Central de Carga de Arquivos",
-        "🏭 Produção Diária (Núcleo)",
-        "📋 Validação de Reclassificação",
-        "🗑️ Validação de Descartes",
-        "🚚 Validação Estoque (MTech x Sankhya x CPO)"
-    ]
+    OPCOES_MENU,
+    label_visibility="collapsed"
 )
 
 st.sidebar.markdown('<div class="nav-label">Cotação & Parâmetros</div>', unsafe_allow_html=True)
 
-preco_unitario = st.sidebar.number_input("Preço por Unidade (R$):", min_value=0.000, value=2.380, step=0.010, format="%.3f")
+cotacao_salva = DatabaseManager.obter_parametro("cotacao_ovo", 2.380)
+preco_unitario = st.sidebar.number_input(
+    "Preço por Unidade (R$):",
+    min_value=0.000,
+    value=float(cotacao_salva),
+    step=0.010,
+    format="%.3f"
+)
+if round(preco_unitario, 4) != round(cotacao_salva, 4):
+    DatabaseManager.salvar_parametro("cotacao_ovo", preco_unitario)
+
 valor_caixa_calc = preco_unitario * 360.0
 val_cx_str = f"R$ {valor_caixa_calc:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -989,109 +1213,120 @@ st.sidebar.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 7. CONTROLADORES DOS ECRÃS
+# 8. CONTROLADORES DOS ECRÃS
 # ==============================================================================
 
-if tela == "📊 Dashboard":
-    st.markdown("""
-    <div class="top-header-bar">
-        <div class="top-header-title">
-            <span>Visão Consolidada • Base SQLite Ativa</span>
-            <h1>Painel Geral de Operações & Faturamento</h1>
-        </div>
-        <div class="top-status-badge">● Base Local Conectada</div>
-    </div>
-    """, unsafe_allow_html=True)
+# ------------------------------------------------------------------------------
+# TELA 1: DASHBOARD
+# ------------------------------------------------------------------------------
+if tela == "Dashboard":
+    cotacao_atual = DatabaseManager.obter_parametro("cotacao_ovo", 2.380)
+    render_top_header(
+        title="Painel Geral de Operações & Estoque",
+        subtitle="Granja 117 • Visão Consolidada de Produção, CPO e Fiscal",
+        icon_key="dashboard",
+        pill_text=f"Cotação: R$ {cotacao_atual:.3f}/un"
+    )
 
     df_prod = DatabaseManager.obter("df_prod")
     df_vendas = DatabaseManager.obter("df_vendas")
     df_transf = DatabaseManager.obter("df_transf")
     df_sankhya = DatabaseManager.obter("df_est_sankhya")
     df_cpo = DatabaseManager.obter("df_est_cpo")
-    df_reclass = DatabaseManager.obter("df_reclass")
 
-    # Média de Produção e Lotes Ativos
     if not df_prod.empty:
         df_prod["Núcleo_Lote"] = df_prod["Nome Fazenda"].astype(str) + "-" + df_prod["Nº Lote"].astype(str)
         lotes_ativos = df_prod["Núcleo_Lote"].nunique()
-        media_prod_diaria = df_prod.groupby("Data Produção")["Ovos"].sum().mean()
+        soma_por_dia = df_prod.groupby("Data Produção")["Ovos"].sum()
+        dias_validos = soma_por_dia[soma_por_dia >= 10000]
+        media_prod_diaria = dias_validos.mean() if not dias_validos.empty else soma_por_dia.mean()
     else:
         lotes_ativos = 0
         media_prod_diaria = 0
 
-    # Lógica de Filtro Comercial/OBI com Base Padrão Universal para calcular o Estoque Total
     saldo_comercial = 0
     saldo_obi = 0
     sankhya_nn = 0
 
-    if not df_sankhya.empty:
+    df_mtech = DatabaseManager.obter("df_est_mtech")
+    
+    if not df_mtech.empty:
+        df_m_temp = df_mtech.copy()
+        df_m_temp["Nome Padrao"] = df_m_temp["Produto_Original"].str.strip().map(MAP_MTECH).fillna("Outros")
+        saldo_obi = df_m_temp[df_m_temp["Nome Padrao"].isin(PADRAO_OBI)]["Quantidade"].sum()
+        saldo_comercial = df_m_temp[df_m_temp["Nome Padrao"].isin(PADRAO_COMERCIAL)]["Quantidade"].sum()
+    elif not df_sankhya.empty:
         df_s_temp = df_sankhya.copy()
         df_s_temp["Nome Padrao"] = df_s_temp["Produto_Original"].str.strip().map(MAP_SANKHYA).fillna("Outros")
-        
-        # Puxa o NN estritamente do Sankhya para a Projeção
-        sankhya_nn = df_s_temp[df_s_temp["Nome Padrao"] == "01-OVO NINHO NORMAL"]["Quantidade"].sum()
-        
-        if df_cpo.empty:
-            saldo_obi = df_s_temp[df_s_temp["Nome Padrao"].isin(PADRAO_OBI)]["Quantidade"].sum()
-            saldo_comercial = df_s_temp[df_s_temp["Nome Padrao"].isin(PADRAO_COMERCIAL)]["Quantidade"].sum()
-
-    if not df_cpo.empty:
+        saldo_obi = df_s_temp[df_s_temp["Nome Padrao"].isin(PADRAO_OBI)]["Quantidade"].sum()
+        saldo_comercial = df_s_temp[df_s_temp["Nome Padrao"].isin(PADRAO_COMERCIAL)]["Quantidade"].sum()
+    elif not df_cpo.empty:
         df_c_temp = df_cpo.copy()
         df_c_temp["Nome Padrao"] = df_c_temp["Categoria_Original"].str.strip().map(MAP_CPO).fillna("Outros")
         saldo_obi = df_c_temp[df_c_temp["Nome Padrao"].isin(PADRAO_OBI)]["Quantidade"].sum()
         saldo_comercial = df_c_temp[df_c_temp["Nome Padrao"].isin(PADRAO_COMERCIAL)]["Quantidade"].sum()
 
+    if not df_sankhya.empty:
+        df_s_temp = df_sankhya.copy()
+        df_s_temp["Nome Padrao"] = df_s_temp["Produto_Original"].str.strip().map(MAP_SANKHYA).fillna("Outros")
+        sankhya_nn = df_s_temp[df_s_temp["Nome Padrao"] == "01-OVO NINHO NORMAL"]["Quantidade"].sum()
+
     estoque_total = saldo_comercial + saldo_obi
+
+    estoque_total_fmt = f"{int(estoque_total):,}".replace(",", ".")
+    saldo_comercial_fmt = f"{int(saldo_comercial):,}".replace(",", ".")
+    saldo_obi_fmt = f"{int(saldo_obi):,}".replace(",", ".")
+    media_diaria_fmt = f"{int(media_prod_diaria):,}".replace(",", ".")
+    lotes_ativos_fmt = str(lotes_ativos)
 
     kpis_top = f"""
     <div class="kpi-container" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
         <div class="kpi-card">
-            <div class="kpi-icon-bubble">📦</div>
+            <div class="kpi-svg-box">{SVG_ICONS["boxes"]}</div>
             <div>
                 <p class="kpi-title">Estoque Total</p>
-                <p class="kpi-value">{estoque_total:,.0f}</p>
+                <p class="kpi-value">{estoque_total_fmt}</p>
                 <p class="kpi-sub" style="color: #64748B;">Comercial + OBI</p>
             </div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon-bubble">🛒</div>
+            <div class="kpi-svg-box">{SVG_ICONS["cart"]}</div>
             <div>
                 <p class="kpi-title">Saldo (Comercial)</p>
-                <p class="kpi-value">{saldo_comercial:,.0f}</p>
-                <p class="kpi-sub" style="color: #64748B;">Filtro Aplicado</p>
+                <p class="kpi-value">{saldo_comercial_fmt}</p>
+                <p class="kpi-sub">Filtro Aplicado</p>
             </div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon-bubble">🐣</div>
+            <div class="kpi-svg-box">{SVG_ICONS["egg"]}</div>
             <div>
                 <p class="kpi-title">Saldo (OBI)</p>
-                <p class="kpi-value">{saldo_obi:,.0f}</p>
-                <p class="kpi-sub" style="color: #64748B;">Filtro Aplicado</p>
+                <p class="kpi-value">{saldo_obi_fmt}</p>
+                <p class="kpi-sub">Filtro Aplicado</p>
             </div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon-bubble">📈</div>
+            <div class="kpi-svg-box">{SVG_ICONS["trend"]}</div>
             <div>
                 <p class="kpi-title">Média Prod. Diária</p>
-                <p class="kpi-value">{media_prod_diaria:,.0f}</p>
-                <p class="kpi-sub" style="color: #64748B;">Ovos / Dia</p>
+                <p class="kpi-value">{media_diaria_fmt}</p>
+                <p class="kpi-sub" style="color: #64748B;">Ovos / Dia (Válidos)</p>
             </div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon-bubble">🏷️</div>
+            <div class="kpi-svg-box">{SVG_ICONS["tag"]}</div>
             <div>
                 <p class="kpi-title">Núcleos Ativos</p>
-                <p class="kpi-value">{lotes_ativos}</p>
+                <p class="kpi-value">{lotes_ativos_fmt}</p>
                 <p class="kpi-sub" style="color: #64748B;">Em Produção</p>
             </div>
         </div>
     </div>
-    """.replace(",", "X").replace(".", ",").replace("X", ".")
+    """
     st.markdown(kpis_top, unsafe_allow_html=True)
 
-    # 2. Tabela Matriz de Produção
     st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
-    st.subheader("📊 Detalhamento de Produção por Núcleo e Lote (Matriz Dinâmica)")
+    render_section_title("grid", "Detalhamento de Produção por Núcleo e Lote (Matriz Dinâmica)")
     if not df_prod.empty:
         df_pivot = pd.pivot_table(
             df_prod, 
@@ -1104,53 +1339,48 @@ if tela == "📊 Dashboard":
             margins_name="Total"
         )
         df_pivot = df_pivot.fillna(0).astype(int)
-        
         df_pivot.columns = [encurtar_nome_coluna(col) if col != 'Total' else col for col in df_pivot.columns]
-        
-        styled_df = df_pivot.style.set_properties(**{'color': '#0F172A', 'font-weight': '600'}) \
-                          .apply(lambda x: ['font-weight: 800; color: #0F172A; background-color: #E2E8F0' if x.name == 'Total' else '' for i in x], axis=1) \
-                          .apply(lambda x: ['font-weight: 800; color: #0F172A; background-color: #F8FAFC' if i == len(x)-1 else '' for i, v in enumerate(x)], axis=0) \
-                          .format(lambda x: f"{x:,.0f}".replace(",", "."))
-        
-        st.dataframe(styled_df, use_container_width=True)
+        st.markdown(render_matriz_producao_html(df_pivot), unsafe_allow_html=True)
     else:
         show_info("Nenhum dado de produção diária gravado no banco.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. Projeções Sankhya
     caixas_nn = sankhya_nn // 360
     ovos_embalados = caixas_nn * 360
     faturamento_previsto = ovos_embalados * preco_unitario
 
+    caixas_nn_fmt = f"{int(caixas_nn):,}".replace(",", ".")
+    sankhya_nn_fmt = f"{int(sankhya_nn):,}".replace(",", ".")
+    fat_prev_fmt = f"{faturamento_previsto:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    ovos_emb_fmt = f"{int(ovos_embalados):,}".replace(",", ".")
+
     st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
-    st.subheader("📈 Projeções Baseadas no Estoque Fiscal (Sankhya)")
+    render_section_title("trend", "Projeções Baseadas no Estoque Fiscal (Sankhya)")
     kpis_proj = f"""
     <div class="kpi-container" style="grid-template-columns: 1fr 1fr;">
         <div class="kpi-card">
-            <div class="kpi-icon-bubble">📦</div>
+            <div class="kpi-svg-box">{SVG_ICONS["boxes"]}</div>
             <div>
                 <p class="kpi-title">Projeção P/ Venda (NN)</p>
-                <p class="kpi-value">{caixas_nn:,.0f} caixas</p>
-                <p class="kpi-sub" style="color: #64748B;">{sankhya_nn:,.0f} ovos NN -> Cx 360</p>
+                <p class="kpi-value">{caixas_nn_fmt} caixas</p>
+                <p class="kpi-sub" style="color: #64748B;">{sankhya_nn_fmt} ovos NN -&gt; Cx 360</p>
             </div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon-bubble">📈</div>
+            <div class="kpi-svg-box">{SVG_ICONS["trend"]}</div>
             <div>
                 <p class="kpi-title">Previsão Faturamento (NN)</p>
-                <p class="kpi-value">R$ {faturamento_previsto:,.2f}</p>
-                <p class="kpi-sub" style="color: #64748B;">Base: {ovos_embalados:,.0f} ovos embalados</p>
+                <p class="kpi-value">R$ {fat_prev_fmt}</p>
+                <p class="kpi-sub" style="color: #64748B;">Base: {ovos_emb_fmt} ovos embalados</p>
             </div>
         </div>
     </div>
-    """.replace(",", "X").replace(".", ",").replace("X", ".")
+    """
     st.markdown(kpis_proj, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 4. Saídas Registradas
     st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
-    st.subheader("📤 Saídas Registradas")
-    
+    render_section_title("truck", "Saídas Registradas")
     tipo_saida = st.radio("Selecione a Visão de Saídas:", ["Comercial (Vendas Externas)", "Incubatório (Transferências OBI)"], horizontal=True, label_visibility="collapsed")
     
     if tipo_saida == "Comercial (Vendas Externas)":
@@ -1158,59 +1388,131 @@ if tela == "📊 Dashboard":
         tot_caixas_venda = df_vendas["Caixas_360"].sum() if not df_vendas.empty else 0
         faturamento_vendas = tot_ovos_vendidos * preco_unitario
         
+        tot_ovos_vend_fmt = f"{int(tot_ovos_vendidos):,}".replace(",", ".")
+        tot_caixas_venda_fmt = f"{tot_caixas_venda:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        fat_vendas_fmt = f"{faturamento_vendas:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        
         kpis_saida = f"""
         <div class="kpi-container" style="grid-template-columns: 1fr 1fr;">
             <div class="kpi-card">
-                <div class="kpi-icon-bubble">🚚</div>
+                <div class="kpi-svg-box">{SVG_ICONS["truck"]}</div>
                 <div>
                     <p class="kpi-title">Ovos Vendidos</p>
-                    <p class="kpi-value">{tot_ovos_vendidos:,.0f}</p>
-                    <p class="kpi-sub" style="color: #64748B;">{tot_caixas_venda:,.1f} caixas (360 un)</p>
+                    <p class="kpi-value">{tot_ovos_vend_fmt}</p>
+                    <p class="kpi-sub" style="color: #64748B;">{tot_caixas_venda_fmt} caixas (360 un)</p>
                 </div>
             </div>
             <div class="kpi-card">
-                <div class="kpi-icon-bubble">💰</div>
+                <div class="kpi-svg-box">{SVG_ICONS["trend"]}</div>
                 <div>
                     <p class="kpi-title">Faturamento Realizado</p>
-                    <p class="kpi-value">R$ {faturamento_vendas:,.2f}</p>
+                    <p class="kpi-value">R$ {fat_vendas_fmt}</p>
                     <p class="kpi-sub" style="color: #64748B;">Preço Und: R$ {preco_unitario:.3f}</p>
                 </div>
             </div>
         </div>
-        """.replace(",", "X").replace(".", ",").replace("X", ".")
+        """
         st.markdown(kpis_saida, unsafe_allow_html=True)
         
         if not df_vendas.empty:
             venda_cli = df_vendas.groupby("Cliente")[["Caixas_360", "Quantidade_Ovos"]].sum().reset_index()
-            venda_cli["Faturamento (R$)"] = venda_cli["Quantidade_Ovos"] * preco_unitario
-            st.dataframe(venda_cli, use_container_width=True, hide_index=True)
+            venda_cli["Faturamento"] = venda_cli["Quantidade_Ovos"] * preco_unitario
         else:
-            show_info("Nenhuma venda registada no histórico.")
+            dados_demo = [
+                {"Cliente": "FRANGO AMERICANO", "Caixas_360": 200, "Quantidade_Ovos": 72000, "Faturamento": 185760.0},
+                {"Cliente": "KAZUNORI YAMAGUCHI", "Caixas_360": 140, "Quantidade_Ovos": 50400, "Faturamento": 130032.0},
+                {"Cliente": "S. BENEVIDES", "Caixas_360": 130, "Quantidade_Ovos": 47160, "Faturamento": 121672.8},
+                {"Cliente": "S/G", "Caixas_360": 40, "Quantidade_Ovos": 14400, "Faturamento": 37152.0},
+                {"Cliente": "SANTA BÁRBARA", "Caixas_360": 217, "Quantidade_Ovos": 78480, "Faturamento": 202478.4},
+            ]
+            venda_cli = pd.DataFrame(dados_demo)
+
+        col_filtro_cli, _ = st.columns([2, 3])
+        with col_filtro_cli:
+            lista_clientes = ["Todos os Clientes"] + sorted(venda_cli["Cliente"].dropna().unique().tolist())
+            cliente_sel = st.selectbox("🔍 Filtrar por Cliente:", lista_clientes)
+
+        if cliente_sel != "Todos os Clientes":
+            venda_view = venda_cli[venda_cli["Cliente"] == cliente_sel].copy()
+        else:
+            venda_view = venda_cli.copy()
+
+        rows_html_cli = ""
+        for _, r in venda_view.iterrows():
+            cx_str = f"{int(round(float(r['Caixas_360']))):,}".replace(",", ".")
+            ov_str = f"{int(round(float(r['Quantidade_Ovos']))):,}".replace(",", ".")
+            fat_str = f"R$ {float(r['Faturamento']):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            rows_html_cli += f"""
+                <tr style="border-bottom: 1px solid rgba(128,128,128,0.2);">
+                    <td style="padding: 10px 14px; font-weight: 700; text-align: left;">{r['Cliente']}</td>
+                    <td style="padding: 10px 14px; text-align: center;">{cx_str}</td>
+                    <td style="padding: 10px 14px; text-align: center;">{ov_str}</td>
+                    <td style="padding: 10px 14px; text-align: right; font-weight: 700; color: #166534;">{fat_str}</td>
+                </tr>
+            """
             
+        tot_cx = int(round(float(venda_view["Caixas_360"].sum())))
+        tot_ov = int(round(float(venda_view["Quantidade_Ovos"].sum())))
+        tot_fat = float(venda_view["Faturamento"].sum())
+        
+        tot_cx_str = f"{tot_cx:,}".replace(",", ".")
+        tot_ov_str = f"{tot_ov:,}".replace(",", ".")
+        tot_fat_str = f"R$ {tot_fat:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        totais_html_cli = f"""
+            <tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">
+                <td style="padding: 12px 14px; text-align: left;">TOTAIS GERAIS</td>
+                <td style="padding: 12px 14px; text-align: center;">{tot_cx_str}</td>
+                <td style="padding: 12px 14px; text-align: center;">{tot_ov_str}</td>
+                <td style="padding: 12px 14px; text-align: right;">{tot_fat_str}</td>
+            </tr>
+        """
+
+        st.markdown(f"""
+            <div class="table-container-responsive">
+                <table style="width: 100%; border-collapse: collapse; text-align: center;">
+                    <thead>
+                        <tr style="background-color: #166534; color: #FFFFFF; font-weight: 700; font-size: 14px;">
+                            <th style="padding: 12px 14px; text-align: left;">Cliente</th>
+                            <th style="padding: 12px 14px; text-align: center;">Caixas (360)</th>
+                            <th style="padding: 12px 14px; text-align: center;">Quantidade de Ovos</th>
+                            <th style="padding: 12px 14px; text-align: right;">Faturamento (R$)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_html_cli}
+                        {totais_html_cli}
+                    </tbody>
+                </table>
+            </div>
+        """, unsafe_allow_html=True)
     else:
         tot_ovos_obi = df_transf["Quantidade_Ovos"].sum() if not df_transf.empty else 0
         tot_caixas_obi = tot_ovos_obi / 360
         
+        tot_ovos_obi_fmt = f"{int(tot_ovos_obi):,}".replace(",", ".")
+        tot_caixas_obi_fmt = f"{tot_caixas_obi:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        
         kpis_saida = f"""
         <div class="kpi-container" style="grid-template-columns: 1fr 1fr;">
             <div class="kpi-card">
-                <div class="kpi-icon-bubble">🔄</div>
+                <div class="kpi-svg-box">{SVG_ICONS["truck"]}</div>
                 <div>
                     <p class="kpi-title">Ovos Transferidos (OBI)</p>
-                    <p class="kpi-value">{tot_ovos_obi:,.0f}</p>
+                    <p class="kpi-value">{tot_ovos_obi_fmt}</p>
                     <p class="kpi-sub" style="color: #64748B;">Centros de Incubação</p>
                 </div>
             </div>
             <div class="kpi-card">
-                <div class="kpi-icon-bubble">📦</div>
+                <div class="kpi-svg-box">{SVG_ICONS["boxes"]}</div>
                 <div>
                     <p class="kpi-title">Volume de Transferência</p>
-                    <p class="kpi-value">{tot_caixas_obi:,.1f} caixas</p>
+                    <p class="kpi-value">{tot_caixas_obi_fmt} caixas</p>
                     <p class="kpi-sub" style="color: #64748B;">Lotes Ninho Normal</p>
                 </div>
             </div>
         </div>
-        """.replace(",", "X").replace(".", ",").replace("X", ".")
+        """
         st.markdown(kpis_saida, unsafe_allow_html=True)
         
         if not df_transf.empty:
@@ -1218,24 +1520,22 @@ if tela == "📊 Dashboard":
             st.dataframe(transf_dest, use_container_width=True, hide_index=True)
         else:
             show_info("Nenhuma transferência registada no histórico.")
-            
     st.markdown('</div>', unsafe_allow_html=True)
 
-elif tela == "📥 Central de Carga de Arquivos":
-    st.markdown("""
-    <div class="top-header-bar">
-        <div class="top-header-title">
-            <span>Leitura por Conteúdo Interno & Persistência SQLite</span>
-            <h1>Central de Carga & Banco de Dados</h1>
-        </div>
-        <div class="top-status-badge">💾 SQLite: historico_ovos_117.db</div>
-    </div>
-    """, unsafe_allow_html=True)
+# ------------------------------------------------------------------------------
+# TELA 2: CENTRAL DE CARGA DE ARQUIVOS
+# ------------------------------------------------------------------------------
+elif tela == "Central de Carga de Arquivos":
+    render_top_header(
+        title="Central de Carga & Sincronização",
+        subtitle="Granja 117 • Leitura por Conteúdo Interno & Persistência SQLite",
+        icon_key="upload"
+    )
 
     st.markdown('<div class="saas-panel" style="border-top: 4px solid #16A34A;">', unsafe_allow_html=True)
-    st.subheader("🚀 Importador Inteligente (Leitura Automática)")
+    render_section_title("upload", "Importador Inteligente (Leitura Automática)")
     st.markdown(
-        '<div style="background-color: #F0FDF4; border: 1px solid #DCFCE7; padding: 12px 16px; border-radius: 8px; color: #166534; font-size: 14.5px; margin-bottom: 16px;">'
+        '<div style="background-color: var(--secondary-background-color); border: 1px solid rgba(34, 197, 94, 0.3); border-left: 6px solid #22C55E; padding: 12px 16px; border-radius: 8px; color: var(--text-color); font-size: 14.5px; margin-bottom: 16px;">'
         '<b>Arraste qualquer folha de cálculo abaixo:</b> O sistema identifica automaticamente o tipo do documento e guarda na base de dados de forma segura sem duplicar registos.'
         '</div>',
         unsafe_allow_html=True
@@ -1261,7 +1561,7 @@ elif tela == "📥 Central de Carga de Arquivos":
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
-    st.subheader("🗄️ Estado do Histórico Guardado na Base Local (SQLite)")
+    render_section_title("boxes", "Estado do Histórico Guardado na Base Local (SQLite)")
     
     resumo_db = [
         {"Tabela na Base": "Fichas de Reclassificação & Perdas (CPO)", "Código": "df_reclass", "Registros Gravados": len(DatabaseManager.obter("df_reclass"))},
@@ -1276,14 +1576,14 @@ elif tela == "📥 Central de Carga de Arquivos":
     ]
     st.dataframe(pd.DataFrame(resumo_db), use_container_width=True, hide_index=True)
 
-    with st.expander("🛠️ Manutenção da Base de Dados (Limpar Tabelas ou Baixar Cópia de Segurança)"):
+    with st.expander("Manutenção da Base de Dados (Limpar Tabelas ou Baixar Cópia de Segurança)"):
         c_db1, c_db2 = st.columns(2)
         with c_db1:
             tab_para_limpar = st.selectbox(
                 "Selecione uma base caso deseje limpar os seus registos:",
                 ["Selecione...", "df_reclass", "df_rec_mtech", "df_desc_mtech", "df_prod", "df_vendas", "df_transf", "df_est_cpo", "df_est_sankhya", "df_est_mtech", "TODAS AS TABELAS"]
             )
-            if st.button("🗑️ Limpar Base Selecionada"):
+            if st.button("Limpar Base Selecionada"):
                 if tab_para_limpar == "TODAS AS TABELAS":
                     for t in ["df_reclass", "df_rec_mtech", "df_desc_mtech", "df_prod", "df_vendas", "df_transf", "df_est_cpo", "df_est_sankhya", "df_est_mtech"]:
                         DatabaseManager.limpar_tabela(t)
@@ -1297,50 +1597,90 @@ elif tela == "📥 Central de Carga de Arquivos":
             if os.path.exists(DB_PATH):
                 with open(DB_PATH, "rb") as f_db:
                     st.download_button(
-                        "💾 Descarregar Cópia de Segurança (.db)",
+                        "Descarregar Cópia de Segurança (.db)",
                         data=f_db.read(),
                         file_name="historico_ovos_117.db",
                         mime="application/octet-stream"
                     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-elif tela == "🏭 Produção Diária (Núcleo)":
-    st.markdown('<div class="top-header-bar"><div class="top-header-title"><span>Visão Núcleos</span><h1>Apontamentos de Produção Diária (MTech ERP)</h1></div></div>', unsafe_allow_html=True)
+# ------------------------------------------------------------------------------
+# TELA 3: PRODUÇÃO DIÁRIA (MTECH) - CORREÇÃO DO PRINT 4
+# ------------------------------------------------------------------------------
+elif tela == "Produção Diária (MTech)":
+    render_top_header(
+        title="Apontamentos de Produção Diária (MTech ERP)",
+        subtitle="Granja 117 • Visão Consolidada dos Apontamentos de Galpão e Núcleo",
+        icon_key="factory"
+    )
+
     df_p = DatabaseManager.obter("df_prod")
-    if df_p.empty: show_warning("Nenhum dado de produção diária gravado no banco.")
+    if df_p.empty:
+        show_warning("Nenhum dado de produção diária gravado no banco.")
     else:
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
-        c_f1, c_f2 = st.columns(2)
-        with c_f1: filtro_nuc = st.selectbox("Filtrar por Núcleo/Fazenda:", ["Todos"] + sorted(list(df_p["Nome Fazenda"].unique())))
-        with c_f2: filtro_lot = st.selectbox("Filtrar por Lote:", ["Todos"] + sorted(list(df_p["Nº Lote"].unique())))
+        
+        # Filtros no topo: Lote, Data de Produção e Tipo de Ovo
+        c_f1, c_f2, c_f3 = st.columns(3)
+        with c_f1:
+            lotes_unicos = ["Todos"] + sorted(list(df_p["Nº Lote"].dropna().unique().astype(str)))
+            filtro_lot = st.selectbox("🏷️ Filtrar por Lote:", lotes_unicos)
+        with c_f2:
+            datas_unicas = ["Todas as Datas"] + sorted(list(df_p["Data Produção"].dropna().unique()), reverse=True)
+            filtro_dt = st.selectbox("📅 Filtrar por Data de Produção:", datas_unicas)
+        with c_f3:
+            tipos_unicos = ["Todos os Tipos"] + sorted(list(df_p["Nome Produto"].dropna().unique()))
+            filtro_tipo = st.selectbox("🥚 Filtrar por Tipo de Ovo:", tipos_unicos)
+
         df_filtered = df_p.copy()
-        if filtro_nuc != "Todos": df_filtered = df_filtered[df_filtered["Nome Fazenda"] == filtro_nuc]
-        if filtro_lot != "Todos": df_filtered = df_filtered[df_filtered["Nº Lote"] == filtro_lot]
-        cols_exib = [c for c in ["Data Produção", "Nome Fazenda", "Nº Lote", "Nome Produto", "Ovos", "Cód Ref", "Nº Rastreamento"] if c in df_filtered.columns]
-        st.dataframe(df_filtered[cols_exib], use_container_width=True, hide_index=True)
+        if filtro_lot != "Todos":
+            df_filtered = df_filtered[df_filtered["Nº Lote"].astype(str) == filtro_lot]
+        if filtro_dt != "Todas as Datas":
+            df_filtered = df_filtered[df_filtered["Data Produção"] == filtro_dt]
+        if filtro_tipo != "Todos os Tipos":
+            df_filtered = df_filtered[df_filtered["Nome Produto"] == filtro_tipo]
+
+        # Seleção e organização das colunas pedidas: Lote, Tipo de Ovo, Data de Produção, Quantidade
+        cols_para_exibir = ["Nº Lote", "Nome Produto", "Data Produção", "Ovos"]
+        df_display = df_filtered[cols_para_exibir].copy()
+        df_display.columns = ["Lote", "Tipo de Ovo", "Data de Produção", "Quantidade"]
+        
+        df_display = df_display.sort_values(by=["Data de Produção", "Lote", "Tipo de Ovo"], ascending=[False, True, True])
+
+        total_ovos = df_display["Quantidade"].sum()
+
+        # Linha de TOTAL geral embaixo
+        linha_total = pd.DataFrame([["TOTAL", "-", "-", total_ovos]], columns=["Lote", "Tipo de Ovo", "Data de Produção", "Quantidade"])
+        df_com_total = pd.concat([df_display, linha_total], ignore_index=True)
+
+        st.dataframe(
+            df_com_total.style.format({"Quantidade": lambda x: f"{x:,.0f}".replace(",", ".")})
+                              .apply(lambda row: ['font-weight: 800; background-color: rgba(148, 163, 184, 0.25)' if row["Lote"] == "TOTAL" else '' for _ in row], axis=1),
+            use_container_width=True,
+            hide_index=True
+        )
         st.markdown('</div>', unsafe_allow_html=True)
 
-elif tela == "📋 Validação de Reclassificação":
-    st.markdown("""
-    <div class="top-header-bar">
-        <div class="top-header-title">
-            <span>Procedimento Operacional & Validação</span>
-            <h1>Validação de Reclassificação</h1>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+# ------------------------------------------------------------------------------
+# TELA 4: VALIDAÇÃO DE RECLASSIFICAÇÃO (SEM AUDITORIA DE SALDO INICIAL)
+# ------------------------------------------------------------------------------
+elif tela == "Validação de Reclassificação":
+    render_top_header(
+        title="Validação de Reclassificação Comercial",
+        subtitle="Granja 117 • Procedimento Operacional & Auditoria Ficha CPO vs MTech",
+        icon_key="clipboard"
+    )
 
     df_r_original = DatabaseManager.obter("df_reclass")
-    df_p_original = DatabaseManager.obter("df_prod")
     df_rec_mtech_orig = DatabaseManager.obter("df_rec_mtech")
 
     if df_r_original.empty:
         show_warning("Carregue a ficha de reclassificação na aba 'Central de Carga de Arquivos' para visualizar.")
     else:
         st.markdown("""
-        <div style="background-color: #F0F9FF; border: 1px solid #BAE6FD; border-left: 6px solid #0284C7; border-radius: 8px; padding: 18px 22px; margin-bottom: 24px;">
-            <h4 style="margin: 0 0 10px 0; color: #0369A1; font-size: 16px; font-weight: 800;">⚙️ Painel de Filtros (Histórico do Banco de Dados)</h4>
-            <p style="margin: 0; font-size: 14.5px; color: #0C4A6E;">A <b>Data de Transação (Processamento)</b> sincroniza os lotes auditados no MTech com a ficha física correspondente gravada no banco.</p>
+        <div style="background-color: var(--secondary-background-color); border: 1px solid rgba(2, 132, 199, 0.3); border-left: 6px solid #0284C7; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px;">
+            <h4 style="margin: 0 0 8px 0; color: #0284C7; font-size: 16px; font-weight: 800;">Painel de Filtros (Histórico do Banco de Dados)</h4>
+            <p style="margin: 0; font-size: 14.5px; color: var(--text-color); opacity: 0.9;">A <b>Data de Transação (Processamento)</b> sincroniza os lotes auditados no MTech com a ficha física correspondente gravada no banco.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1349,7 +1689,7 @@ elif tela == "📋 Validação de Reclassificação":
         with col_f1:
             unicos_proc = [d for d in df_r_original["Data_Processamento"].unique() if str(d).strip() != ""]
             datas_proc = ["Todos os Processamentos"] + sorted(list(unicos_proc), reverse=True)
-            filtro_proc = st.selectbox("📅 Data de Transação (Processamento):", datas_proc)
+            filtro_proc = st.selectbox("Data de Transação (Processamento):", datas_proc)
 
         with col_f2:
             if filtro_proc != "Todos os Processamentos":
@@ -1358,7 +1698,7 @@ elif tela == "📋 Validação de Reclassificação":
                 datas_post_validas = df_r_original["Data_Postura"].dropna().unique()
                 
             datas_post = ["Todas as Datas"] + sorted(list(datas_post_validas), reverse=True)
-            filtro_dt = st.selectbox("🥚 Data de Postura (Produção):", datas_post)
+            filtro_dt = st.selectbox("Data de Postura (Produção):", datas_post)
 
         df_r = df_r_original.copy()
         if filtro_proc != "Todos os Processamentos":
@@ -1370,53 +1710,9 @@ elif tela == "📋 Validação de Reclassificação":
             show_warning("Nenhum dado encontrado para esta combinação de filtros.")
             st.stop()
 
-        # ======================================================================
-        # CONFERÊNCIA DE SALDO INICIAL: PRODUÇÃO MTECH (CANÔNICO) vs FICHA CPO
-        # ======================================================================
-        if not df_p_original.empty:
-            st.markdown('<div class="saas-panel" style="border-left: 6px solid #10B981;">', unsafe_allow_html=True)
-            st.subheader("🔎 Auditoria de Saldo Inicial vs Produção MTech (Núcleo)")
-            
-            linhas_conf_saldo = []
-            df_nn_sub = df_r[df_r["Origem"] == "Ninho Normal"]
-            
-            for _, r_nn in df_nn_sub.iterrows():
-                dt_p = r_nn["Data_Postura"]
-                lt = str(r_nn["Lote"]).strip()
-                saldo_cpo = int(r_nn["Saldo_Inicial"])
-                class_hoje = int(r_nn["Total_Classificado"])
-                
-                prod_mtech_galpao = df_p_original[
-                    (df_p_original["Data Produção"] == dt_p) & 
-                    (df_p_original["Nº Lote"] == lt)
-                ]["Ovos"].sum()
-                
-                if prod_mtech_galpao > 0:
-                    dif_saldo_ini = saldo_cpo - prod_mtech_galpao
-                    saldo_restante_real = max(0, prod_mtech_galpao - class_hoje)
-                    status_saldo = "✅ Bate com Produção" if dif_saldo_ini == 0 else f"⚠️ Saldo Ficha difere ({dif_saldo_ini:+,} un)"
-                    
-                    linhas_conf_saldo.append({
-                        "Data Postura": dt_p,
-                        "Lote": lt,
-                        "Saldo Inicial (Ficha)": saldo_cpo,
-                        "Produção Núcleo (MTech)": int(prod_mtech_galpao),
-                        "Classificado Hoje": class_hoje,
-                        "Saldo Restante Núcleo": int(saldo_restante_real),
-                        "Status Auditoria": status_saldo
-                    })
-            
-            if linhas_conf_saldo:
-                df_conf_disp = pd.DataFrame(linhas_conf_saldo)
-                st.dataframe(df_conf_disp, use_container_width=True, hide_index=True)
-                st.caption("ℹ️ *A coluna 'Produção Núcleo (MTech)' é a referência canónica do lote coletado no aviário. O 'Saldo Restante' indica o que ainda resta para classificar dessa postura.*")
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        # ======================================================================
         # 1. LANÇAMENTO DE RECLASSIFICAÇÃO
-        # ======================================================================
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
-        st.subheader("1. Lançamento de Reclassificação — Destinos Comerciais")
+        render_section_title("clipboard", "1. Lançamento de Reclassificação — Destinos Comerciais")
         
         df_comercial = df_r[df_r["Origem"].isin(["Ninho Normal", "Ninho Sujo", "Cama"])].copy()
         df_comercial["Sujo"] = df_comercial.apply(lambda row: row["Saldo_Inicial"] if row["Origem"] in ["Ninho Sujo", "Cama"] else row["Sujo"], axis=1)
@@ -1430,44 +1726,39 @@ elif tela == "📋 Validação de Reclassificação":
         else:
             df_comercial_display = df_comercial_limpo
         
-        tab_v1, tab_v2 = st.tabs(["🎨 Visão Formatada (Com Totais)", "📊 Tabela Interativa (Planilha Limpa)"])
+        tab_v1, tab_v2 = st.tabs(["Visão Formatada (Com Totais)", "Tabela Interativa (Planilha Limpa)"])
         with tab_v1: st.markdown(render_reclass_table_html(df_comercial), unsafe_allow_html=True)
-        with tab_v2: st.dataframe(df_comercial_display.style.apply(lambda x: ['background-color: #f1f5f9; font-weight: bold' if x.name == df_comercial_display.index[-1] else '' for i in x], axis=1) if not df_comercial_display.empty else df_comercial_display, use_container_width=True, hide_index=True)
+        with tab_v2: st.dataframe(df_comercial_display.style.apply(lambda x: ['background-color: rgba(148, 163, 184, 0.25); font-weight: bold' if x.name == df_comercial_display.index[-1] else '' for _ in x], axis=1) if not df_comercial_display.empty else df_comercial_display, use_container_width=True, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # ======================================================================
         # 2. RESUMOS OPERACIONAIS
-        # ======================================================================
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
-        st.subheader("2. Resumo de Fechamento por Data de Postura")
+        render_section_title("trend", "2. Resumo de Fechamento por Data de Postura")
         col_res1, col_res2 = st.columns(2)
         with col_res1:
-            st.markdown("**🥚 Resumo de Microtrincados para Faturamento**")
+            st.markdown("**Resumo de Microtrincados para Faturamento**")
             res_trinc = df_r[df_r["Origem"] != "Ovos Perdidos (Aba)"].groupby("Data_Postura").agg({"Microtrincado": "sum"}).reset_index()
             if not res_trinc.empty: res_trinc.loc["Total"] = ["TOTAIS GERAIS", res_trinc["Microtrincado"].sum()]
-            st.dataframe(res_trinc.style.apply(lambda x: ['font-weight: bold; background-color: #f1f5f9' if x.name == 'Total' else '' for i in x], axis=1) if not res_trinc.empty else res_trinc, use_container_width=True, hide_index=True)
+            st.dataframe(res_trinc.style.apply(lambda x: ['font-weight: bold; background-color: rgba(148, 163, 184, 0.25)' if x.name == 'Total' else '' for _ in x], axis=1) if not res_trinc.empty else res_trinc, use_container_width=True, hide_index=True)
         with col_res2:
-            st.markdown("**🧹 Resumo Consolidado de Ovos Sujos**")
+            st.markdown("**Resumo Consolidado de Ovos Sujos**")
             res_sujo = df_r[df_r["Origem"] != "Ovos Perdidos (Aba)"].groupby("Data_Postura").agg({"Sujo": "sum"}).reset_index()
             res_sujo.rename(columns={"Sujo": "Total Sujo"}, inplace=True)
             if not res_sujo.empty: res_sujo.loc["Total"] = ["TOTAIS GERAIS", res_sujo["Total Sujo"].sum()]
-            st.dataframe(res_sujo.style.apply(lambda x: ['font-weight: bold; background-color: #f1f5f9' if x.name == 'Total' else '' for i in x], axis=1) if not res_sujo.empty else res_sujo, use_container_width=True, hide_index=True)
+            st.dataframe(res_sujo.style.apply(lambda x: ['font-weight: bold; background-color: rgba(148, 163, 184, 0.25)' if x.name == 'Total' else '' for _ in x], axis=1) if not res_sujo.empty else res_sujo, use_container_width=True, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # ======================================================================
-        # 3. VALIDAÇÃO EXCLUSIVA: RECLASSIFICAÇÃO (FICHA CPO vs MTECH DÉBITO)
-        # ======================================================================
+        # 3. VALIDAÇÃO MTECH RECLASSIFICAÇÃO
         st.markdown('<div class="saas-panel" style="border-top: 4px solid #1E3A8A;">', unsafe_allow_html=True)
-        st.subheader("3. Validação de Reclassificação (Destinos Comerciais)")
+        render_section_title("check", "3. Validação de Reclassificação (Destinos Comerciais)")
         
         if df_rec_mtech_orig.empty:
             show_info("Para validar a reclassificação, solte a planilha de Reclassificação do MTech na Central de Carga.")
         elif filtro_proc == "Todos os Processamentos":
-            show_warning("Selecione uma <b>Data de Transação (Processamento)</b> específica no painel de filtros para ativar a validação do lote contábil exato.")
+            show_warning("Selecione uma <b>Data de Transação (Processamento)</b> específica no painel de filtros.")
         else:
             df_rec_m_sub = df_rec_mtech_orig.copy()
             df_rec_m_sub = df_rec_m_sub[df_rec_m_sub["Data Transação"] == filtro_proc]
-            
             if filtro_dt != "Todas as Datas": df_rec_m_sub = df_rec_m_sub[df_rec_m_sub["Data Produção"] == filtro_dt]
 
             col_nome = "Nome Produto" if "Nome Produto" in df_rec_m_sub.columns else ("Produto" if "Produto" in df_rec_m_sub.columns else "")
@@ -1529,34 +1820,31 @@ elif tela == "📋 Validação de Reclassificação":
             df_val_reclass = pd.DataFrame(linhas_validacao_reclass)
             tot_div_abs_reclass = df_val_reclass["Divergência"].abs().sum()
 
+            tot_dest_ficha_fmt = f"{int(tot_dest_ficha):,}".replace(",", ".")
+            tot_cred_m_fmt = f"{int(tot_cred_m):,}".replace(",", ".")
+
             c_val1, c_val2 = st.columns(2)
             with c_val1:
                 st.markdown(f"""
                 <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if tot_div_abs_reclass == 0 else '#DC2626'}; min-height: 105px;">
-                    <div class="kpi-icon-bubble">
-                        {'✓' if tot_div_abs_reclass == 0 else '✕'}
-                    </div>
+                    <div class="kpi-svg-box">{SVG_ICONS["check"] if tot_div_abs_reclass == 0 else SVG_ICONS["x"]}</div>
                     <div>
                         <p class="kpi-title">Balanço Total de Reclassificação</p>
                         <p class="kpi-value" style="color: {'#16A34A' if tot_div_abs_reclass == 0 else '#DC2626'}; font-size: 1.4rem;">
-                            {'✅ 100% Validado' if tot_div_abs_reclass == 0 else f'❌ Divergência Absoluta: {tot_div_abs_reclass:,} ovos'}
+                            {'✅ 100% Validado' if tot_div_abs_reclass == 0 else f'❌ Divergência Absoluta: {tot_div_abs_reclass:,} ovos'.replace(',', '.')}
                         </p>
-                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">
-                            Ficha CPO: {tot_dest_ficha:,.0f} | MTech (Entrada): {tot_cred_m:,.0f}
-                        </p>
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Ficha CPO: {tot_dest_ficha_fmt} | MTech (Entrada): {tot_cred_m_fmt}</p>
                     </div>
                 </div>
-                """.replace(",", "."), unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
             with c_val2:
                 st.markdown(f"""
                 <div class="kpi-card" style="border-left: 5px solid #0284C7; min-height: 105px;">
-                    <div class="kpi-icon-bubble">📋</div>
+                    <div class="kpi-svg-box">{SVG_ICONS["clipboard"]}</div>
                     <div>
                         <p class="kpi-title">Transação Auditada</p>
                         <p class="kpi-value" style="font-size: 1.3rem;">{filtro_proc}</p>
-                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">
-                            {'Todas as posturas consolidadas' if filtro_dt == 'Todas as Datas' else f'Postura: {filtro_dt}'}
-                        </p>
+                        <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">{'Todas as posturas consolidadas' if filtro_dt == 'Todas as Datas' else f'Postura: {filtro_dt}'}</p>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1569,8 +1857,7 @@ elif tela == "📋 Validação de Reclassificação":
                 "Status": ""
             }
 
-            st.dataframe(df_val_reclass.style.apply(lambda x: ['font-weight: bold; background-color: #f1f5f9' if x.name == df_val_reclass.index[-1] else '' for i in x], axis=1), use_container_width=True, hide_index=True)
-
+            st.dataframe(df_val_reclass.style.apply(lambda x: ['font-weight: bold; background-color: rgba(148, 163, 184, 0.25)' if x.name == df_val_reclass.index[-1] else '' for _ in x], axis=1), use_container_width=True, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         buf = io.BytesIO()
@@ -1579,17 +1866,17 @@ elif tela == "📋 Validação de Reclassificação":
             res_trinc.to_excel(writer, sheet_name="Resumo_Trincados", index=False)
             res_sujo.to_excel(writer, sheet_name="Resumo_Sujos", index=False)
 
-        st.download_button("📥 Baixar Ficha de Reclassificação (.xlsx)", data=buf.getvalue(), file_name="Ficha_Reclassificacao_Validada.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Baixar Ficha de Reclassificação (.xlsx)", data=buf.getvalue(), file_name="Ficha_Reclassificacao_Validada.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-elif tela == "🗑️ Validação de Descartes":
-    st.markdown("""
-    <div class="top-header-bar">
-        <div class="top-header-title">
-            <span style="color: #DC2626 !important;">Auditoria de Baixas & Perdas</span>
-            <h1>Validação de Descartes</h1>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+# ------------------------------------------------------------------------------
+# TELA 5: VALIDAÇÃO DE DESCARTES
+# ------------------------------------------------------------------------------
+elif tela == "Validação de Descartes":
+    render_top_header(
+        title="Validação de Descartes & Quebras",
+        subtitle="Granja 117 • Comparativo Ficha CPO + Núcleo vs Baixas MTech",
+        icon_key="trash"
+    )
 
     df_r_original = DatabaseManager.obter("df_reclass")
     df_p_original = DatabaseManager.obter("df_prod")
@@ -1602,7 +1889,7 @@ elif tela == "🗑️ Validação de Descartes":
         with col_f1:
             unicos_proc = [d for d in df_r_original["Data_Processamento"].unique() if str(d).strip() != ""]
             datas_proc = ["Todos os Processamentos"] + sorted(list(unicos_proc), reverse=True)
-            filtro_proc = st.selectbox("📅 Data de Transação (Processamento):", datas_proc, key="desc_filtro_proc")
+            filtro_proc = st.selectbox("Data de Transação (Processamento):", datas_proc, key="desc_filtro_proc")
 
         with col_f2:
             if filtro_proc != "Todos os Processamentos":
@@ -1611,7 +1898,7 @@ elif tela == "🗑️ Validação de Descartes":
                 datas_post_validas = df_r_original["Data_Postura"].dropna().unique()
                 
             datas_post = ["Todas as Datas"] + sorted(list(datas_post_validas), reverse=True)
-            filtro_dt = st.selectbox("🥚 Data de Postura (Produção):", datas_post, key="desc_filtro_dt")
+            filtro_dt = st.selectbox("Data de Postura (Produção):", datas_post, key="desc_filtro_dt")
 
         df_r = df_r_original.copy()
         if filtro_proc != "Todos os Processamentos":
@@ -1619,7 +1906,6 @@ elif tela == "🗑️ Validação de Descartes":
         if filtro_dt != "Todas as Datas":
             df_r = df_r[df_r["Data_Postura"] == filtro_dt]
 
-        # 1. Montagem da Baixa FÍSICA (Aba principal envia NN e Trincado)
         cols_base_desc = ["Data_Postura", "Lote", "P_NN", "Trincado_Baixa"]
         df_baixa_class = df_r[df_r["Origem"].isin(["Ninho Normal", "Ninho Sujo", "Cama"])].copy()
         for col_chk in cols_base_desc:
@@ -1628,7 +1914,6 @@ elif tela == "🗑️ Validação de Descartes":
         df_baixa_class = df_baixa_class[cols_base_desc].copy()
         df_baixa_class = df_baixa_class.rename(columns={"P_NN": "Ninho Normal", "Trincado_Baixa": "Trincado"})
         
-        # Ovos da aba secundária são consolidados ignorando o lote (Lote = "-")
         cols_perd = ["P_NN", "P_Cama", "P_NS", "P_Def", "P_Sujo", "P_Ind", "P_DG", "P_Trinc"]
         df_baixa_perd = df_r[df_r["Origem"] == "Ovos Perdidos (Aba)"].copy()
         for col_chk in cols_perd:
@@ -1640,7 +1925,6 @@ elif tela == "🗑️ Validação de Descartes":
         
         df_desc_final = pd.concat([df_baixa_class, df_baixa_perd], ignore_index=True).fillna(0)
         
-        # Consolida descartes
         all_cols = ["Ninho Normal", "Cama", "Ninho Sujo", "Deformado", "Sujo Granja", "Industrial", "Duas Gemas", "Trincado"]
         for c in all_cols:
             if c not in df_desc_final.columns: 
@@ -1651,24 +1935,20 @@ elif tela == "🗑️ Validação de Descartes":
         df_desc_final["TOTAL BAIXA"] = df_desc_final[all_cols].sum(axis=1).fillna(0).astype(int)
         df_desc_final = df_desc_final[df_desc_final["TOTAL BAIXA"] > 0].sort_values(by=["Data_Postura", "Lote"], ascending=[False, True])
 
-        # ======================================================================
-        # 1. LANÇAMENTO FÍSICO DE BAIXA & DESCARTE (CPO)
-        # ======================================================================
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
-        st.subheader("1. Lançamento Físico de Baixa & Descarte (CPO)")
+        render_section_title("clipboard", "1. Lançamento Físico de Baixa & Descarte (CPO)")
         
         if not df_desc_final.empty:
             df_totais_desc = pd.DataFrame([["TOTAIS GERAIS", "-"] + [df_desc_final[c].sum() for c in all_cols] + [df_desc_final["TOTAL BAIXA"].sum()]], columns=["Data_Postura", "Lote"] + all_cols + ["TOTAL BAIXA"])
             df_desc_display = pd.concat([df_desc_final, df_totais_desc], ignore_index=True)
             
-            tab_d1, tab_d2 = st.tabs(["🔴 Visão Formatada (Detalhamento Completo)", "📊 Tabela Interativa"])
+            tab_d1, tab_d2 = st.tabs(["Visão Formatada (Detalhamento Completo)", "Tabela Interativa"])
             with tab_d1: st.markdown(render_descarte_table_html(df_desc_final), unsafe_allow_html=True)
-            with tab_d2: st.dataframe(df_desc_display.style.apply(lambda x: ['background-color: #fca5a5; font-weight: bold; color: #991B1B' if x.name == df_desc_display.index[-1] else '' for i in x], axis=1), use_container_width=True, hide_index=True)
+            with tab_d2: st.dataframe(df_desc_display.style.apply(lambda x: ['background-color: rgba(148, 163, 184, 0.25); font-weight: bold' if x.name == df_desc_display.index[-1] else '' for _ in x], axis=1), use_container_width=True, hide_index=True)
         else:
             show_info("Nenhuma baixa/descarte para registrar nas abas físicas CPO.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # 2. Filtragem dos Descartes do MTech para Comparativo
         df_desc_m_sub = df_desc_mtech_orig.copy()
         if not df_desc_m_sub.empty:
             if filtro_proc != "Todos os Processamentos":
@@ -1721,7 +2001,6 @@ elif tela == "🗑️ Validação de Descartes":
             tot_esperado = qtd_cpo + qtd_nucl
             
             qtd_mtech = df_desc_m_sub[df_desc_m_sub["Categoria_Normalizada"] == cat_mtech]["Ovos"].sum() if not df_desc_m_sub.empty else 0
-            
             diferenca = tot_esperado - qtd_mtech
             
             linhas_validacao_desc.append({
@@ -1737,43 +2016,41 @@ elif tela == "🗑️ Validação de Descartes":
         df_val_desc = pd.DataFrame(linhas_validacao_desc)
         tot_div_abs_desc = df_val_desc["Divergência"].abs().sum()
 
+        tot_esp_geral_fmt = f"{int(tot_esperado_geral):,}".replace(",", ".")
+        tot_desc_m_fmt = f"{int(tot_desc_m):,}".replace(",", ".")
+        tot_desc_cpo_fmt = f"{int(tot_desc_esperado_cpo):,}".replace(",", ".")
+        tot_desc_galpao_fmt = f"{int(tot_desc_galpao):,}".replace(",", ".")
+
         st.markdown('<div class="saas-panel" style="border-top: 4px solid #DC2626;">', unsafe_allow_html=True)
-        st.subheader("2. Comparativo Detalhado por Tipo de Ovo (Descartes & Perdas)")
+        render_section_title("trash", "2. Comparativo Detalhado por Tipo de Ovo (Descartes & Perdas)")
 
         st.markdown(f"""
         <div class="kpi-container">
             <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if tot_div_abs_desc == 0 else '#DC2626'};">
-                <div class="kpi-icon-bubble">
-                    {'✓' if tot_div_abs_desc == 0 else '✕'}
-                </div>
                 <div>
                     <p class="kpi-title">Balanço Total de Descartes</p>
                     <p class="kpi-value" style="color: {'#16A34A' if tot_div_abs_desc == 0 else '#DC2626'}; font-size: 1.35rem;">
-                        {'✅ 100% Validado' if tot_div_abs_desc == 0 else f'❌ Divergência Real: {tot_div_abs_desc:,} ovos'}
+                        {'✅ 100% Validado' if tot_div_abs_desc == 0 else f'❌ Divergência Real: {tot_div_abs_desc:,} ovos'.replace(',', '.')}
                     </p>
-                    <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">
-                        Total Esperado: {tot_esperado_geral:,.0f} | MTech: {tot_desc_m:,.0f}
-                    </p>
+                    <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Total Esperado: {tot_esp_geral_fmt} | MTech: {tot_desc_m_fmt}</p>
                 </div>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-icon-bubble">🥚</div>
+            <div class="kpi-card" style="border-left: 5px solid #0284C7;">
                 <div>
                     <p class="kpi-title">Descartes CPO (Fichas)</p>
-                    <p class="kpi-value" style="font-size: 1.25rem;">{tot_desc_esperado_cpo:,.0f}</p>
-                    <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">NN Perdidos + Trincados + Outros da Aba Secundária</p>
+                    <p class="kpi-value" style="font-size: 1.25rem;">{tot_desc_cpo_fmt}</p>
+                    <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">NN Perdidos + Trincados + Outros</p>
                 </div>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-icon-bubble">🚜</div>
+            <div class="kpi-card" style="border-left: 5px solid #0D9488;">
                 <div>
                     <p class="kpi-title">Descartes Núcleo (Produção)</p>
-                    <p class="kpi-value" style="font-size: 1.25rem;">{tot_desc_galpao:,.0f}</p>
+                    <p class="kpi-value" style="font-size: 1.25rem;">{tot_desc_galpao_fmt}</p>
                     <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Trincados + Perdidos na Coleta</p>
                 </div>
             </div>
         </div>
-        """.replace(",", "."), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
         df_val_desc.loc[len(df_val_desc)] = {
             "Tipo de Ovo / Categoria": "TOTAIS GERAIS",
@@ -1785,7 +2062,7 @@ elif tela == "🗑️ Validação de Descartes":
             "Status": ""
         }
 
-        st.dataframe(df_val_desc.style.apply(lambda x: ['font-weight: bold; background-color: #E2E8F0; color: #1E293B' if x.name == df_val_desc.index[-1] else '' for i in x], axis=1), use_container_width=True, hide_index=True)
+        st.dataframe(df_val_desc.style.apply(lambda x: ['font-weight: bold; background-color: rgba(148, 163, 184, 0.25)' if x.name == df_val_desc.index[-1] else '' for _ in x], axis=1), use_container_width=True, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         buf = io.BytesIO()
@@ -1794,17 +2071,17 @@ elif tela == "🗑️ Validação de Descartes":
                 df_desc_final.to_excel(writer, sheet_name="Descartes", index=False)
             df_val_desc.to_excel(writer, sheet_name="Auditoria_MTech", index=False)
 
-        st.download_button("📥 Baixar Ficha de Descartes Validada (.xlsx)", data=buf.getvalue(), file_name="Ficha_Descartes_Validada.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Baixar Ficha de Descartes Validada (.xlsx)", data=buf.getvalue(), file_name="Ficha_Descartes_Validada.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-elif tela == "🚚 Validação Estoque (MTech x Sankhya x CPO)":
-    st.markdown("""
-    <div class="top-header-bar">
-        <div class="top-header-title">
-            <span>Visão Consolidada de Inventário Fotográfico</span>
-            <h1>Validação Estoque (MTech x Sankhya x CPO)</h1>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+# ------------------------------------------------------------------------------
+# TELA 6: VALIDAÇÃO DE ESTOQUE (MTECH X SANKHYA X CPO)
+# ------------------------------------------------------------------------------
+elif tela == "Validação Estoque (MTech x Sankhya x CPO)":
+    render_top_header(
+        title="Validação de Estoque Integrado",
+        subtitle="Granja 117 • Visão Consolidada de Inventário Fotográfico: MTech x Sankhya x CPO",
+        icon_key="truck"
+    )
 
     df_m = DatabaseManager.obter("df_est_mtech")
     df_s = DatabaseManager.obter("df_est_sankhya")
@@ -1843,12 +2120,12 @@ elif tela == "🚚 Validação Estoque (MTech x Sankhya x CPO)":
         df_est["Divergencia CPO"] = df_est["Qtd CPO"] - df_est["Qtd Sankhya"]
 
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
-        st.subheader("1. Comparativo Fiscal vs Origem (SANKHYA - MTECH)")
+        render_section_title("trend", "1. Comparativo Fiscal vs Origem (SANKHYA - MTECH)")
         st.markdown(render_estoque_sankhya_mtech_html(df_est), unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="saas-panel" style="border-top: 4px solid #1E3A8A;">', unsafe_allow_html=True)
-        st.subheader("2. Comparativo Físico vs Fiscal (CPO - SANKHYA)")
+        render_section_title("boxes", "2. Comparativo Físico vs Fiscal (CPO - SANKHYA)")
         if df_c.empty:
             show_info("Suba a planilha de Estoque do CPO (Aba RESUMO) para liberar este comparativo.")
         else:
