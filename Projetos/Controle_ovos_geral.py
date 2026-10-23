@@ -2,10 +2,46 @@ import io
 import os
 import re
 import sqlite3
-from datetime import datetime
+import base64
+import logging
+import uuid
+import unicodedata
+from contextlib import contextmanager
+from datetime import datetime, date, timedelta
+from html import escape as html_escape
+
 import openpyxl
 import pandas as pd
 import streamlit as st
+
+# Deve ser a primeira chamada do Streamlit, antes de qualquer componente/sidebar.
+st.set_page_config(
+    page_title="Granja 117 - Controle Operacional",
+    page_icon="🥚",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+logging.basicConfig(level=logging.INFO)
+
+# Proteção opcional por senha para instalações compartilhadas. Configure a variável
+# de ambiente GRANJA117_APP_PASSWORD para exigir autenticação antes de mostrar dados.
+# Sem essa variável o app continua utilizável localmente, mas não deve ser publicado
+# em rede/Internet sem autenticação externa.
+APP_PASSWORD = os.environ.get("GRANJA117_APP_PASSWORD", "").strip()
+if APP_PASSWORD:
+    if "autenticado_granja117" not in st.session_state:
+        st.session_state["autenticado_granja117"] = False
+    if not st.session_state["autenticado_granja117"]:
+        senha_digitada = st.text_input("Senha de acesso", type="password", key="senha_granja117")
+        if st.button("Entrar", type="primary", key="entrar_granja117"):
+            if senha_digitada == APP_PASSWORD:
+                st.session_state["autenticado_granja117"] = True
+                st.session_state.pop("senha_granja117", None)
+                st.rerun()
+            else:
+                st.error("Senha inválida.")
+        st.stop()
 
 # ==============================================================================
 # 1. CAMADA DE BASE DE DADOS LOCAL (SQLITE)
@@ -25,9 +61,54 @@ class DatabaseManager:
         "df_est_cpo": ["Categoria_Original"]
     }
 
+    TABELAS = tuple(CHAVES_UNICIDADE.keys())
+
     @staticmethod
+    def _validar_tabela(nome_tabela: str):
+        if nome_tabela not in DatabaseManager.TABELAS:
+            raise ValueError(f"Tabela não permitida: {nome_tabela!r}")
+
+    @staticmethod
+    @contextmanager
     def _get_conn():
-        return sqlite3.connect(DB_PATH, check_same_thread=False)
+        # Cada operação usa sua própria conexão e ela é FECHADA ao sair do 'with'
+        # (o 'with' puro do sqlite3 só faz commit e deixa a conexão aberta).
+        conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _gravar_atomico(nome_tabela: str, df: pd.DataFrame):
+        """Grava em tabela temporária e troca os nomes em uma transação SQLite."""
+        DatabaseManager._validar_tabela(nome_tabela)
+        staging = f"__staging_{nome_tabela}_{uuid.uuid4().hex}"
+
+        # A tabela de staging é criada primeiro. Se isso falhar, a tabela vigente
+        # continua intacta.
+        with DatabaseManager._get_conn() as conn:
+            df.to_sql(staging, conn, if_exists="fail", index=False)
+
+        try:
+            with DatabaseManager._get_conn() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(f'DROP TABLE IF EXISTS "{nome_tabela}"')
+                conn.execute(f'ALTER TABLE "{staging}" RENAME TO "{nome_tabela}"')
+                conn.commit()
+        except Exception:
+            # Limpa o staging se a troca falhar; a tabela original é preservada
+            # porque DROP + RENAME pertencem à mesma transação.
+            try:
+                with DatabaseManager._get_conn() as conn:
+                    conn.execute(f'DROP TABLE IF EXISTS "{staging}"')
+            except Exception:
+                logging.exception("Falha ao limpar tabela temporária %s", staging)
+            raise
 
     @staticmethod
     def inicializar():
@@ -60,7 +141,7 @@ class DatabaseManager:
                 if row is not None:
                     return float(row[0])
         except Exception:
-            pass
+            logging.exception("Não foi possível ler o parâmetro %s", chave)
         return valor_padrao
 
     @staticmethod
@@ -72,71 +153,133 @@ class DatabaseManager:
                     (chave, float(valor))
                 )
         except Exception:
-            pass
+            logging.exception("Não foi possível salvar o parâmetro %s", chave)
+            raise
 
     @staticmethod
-    def salvar(nome_tabela: str, df_novo: pd.DataFrame):
+    def salvar(nome_tabela: str, df_novo: pd.DataFrame, substituir: bool = False):
+        """Persiste registros com deduplicação por chave de negócio.
+
+        substituir=True é reservado a fotografias de estoque: a tabela só é
+        trocada depois de validar que o conjunto novo contém linhas.
+        Retorna (quantidade recebida, quantidade de chaves duplicadas, chaves).
+        """
+        DatabaseManager._validar_tabela(nome_tabela)
         if df_novo is None or df_novo.empty:
             return 0, 0, []
-        
+
+        df_novo = df_novo.copy().reset_index(drop=True)
         df_atual = DatabaseManager.obter(nome_tabela)
-        chaves = DatabaseManager.CHAVES_UNICIDADE.get(nome_tabela, [])
-        chaves_validas = [c for c in chaves if c in df_novo.columns and c in df_atual.columns]
-        
-        duplicados = []
-        if not df_atual.empty and chaves_validas:
-            dups = df_novo.merge(df_atual[chaves_validas].drop_duplicates(), on=chaves_validas, how='inner')
-            if not dups.empty:
-                duplicados = dups[chaves_validas].drop_duplicates().to_dict(orient='records')
+        chaves_configuradas = DatabaseManager.CHAVES_UNICIDADE.get(nome_tabela, [])
+        chaves_novas = [c for c in chaves_configuradas if c in df_novo.columns]
+        chaves_existentes = [c for c in chaves_configuradas if c in df_atual.columns]
 
-        if not df_atual.empty:
-            df_combinado = pd.concat([df_atual, df_novo], ignore_index=True)
+        # Duplicados internos ao arquivo sempre são verificados, inclusive na
+        # primeira carga e mesmo em tabelas de fotografia de estoque.
+        registros_duplicados = []
+        if chaves_novas:
+            mascara_interna = df_novo.duplicated(subset=chaves_novas, keep=False)
+            if mascara_interna.any():
+                registros_duplicados.extend(
+                    df_novo.loc[mascara_interna, chaves_novas].drop_duplicates().to_dict(orient="records")
+                )
+
+        if substituir:
+            df_final = df_novo.drop_duplicates(
+                subset=chaves_novas, keep="last"
+            ).reset_index(drop=True) if chaves_novas else df_novo.drop_duplicates(keep="last").reset_index(drop=True)
         else:
-            df_combinado = df_novo.copy()
+            chaves_confiaveis = bool(chaves_novas) and (
+                df_atual.empty or all(c in df_atual.columns for c in chaves_novas)
+            )
+            if not df_atual.empty and chaves_confiaveis:
+                colunas_existentes = df_atual[chaves_novas].drop_duplicates()
+                colisoes = df_novo.merge(colunas_existentes, on=chaves_novas, how="inner")
+                if not colisoes.empty:
+                    registros_duplicados.extend(
+                        colisoes[chaves_novas].drop_duplicates().to_dict(orient="records")
+                    )
+            elif not df_atual.empty and chaves_novas and not chaves_confiaveis:
+                # Um esquema legado não deve provocar a perda silenciosa de linhas.
+                logging.warning(
+                    "A tabela %s não contém todas as chaves configuradas; usando deduplicação de linha completa até a migração.",
+                    nome_tabela,
+                )
 
-        if chaves_validas:
-            df_combinado = df_combinado.drop_duplicates(subset=chaves_validas, keep="last").reset_index(drop=True)
+            df_combinado = pd.concat([df_atual, df_novo], ignore_index=True, sort=False) if not df_atual.empty else df_novo.copy()
+            if chaves_confiaveis:
+                df_final = df_combinado.drop_duplicates(subset=chaves_novas, keep="last").reset_index(drop=True)
+            else:
+                df_final = df_combinado.drop_duplicates(keep="last").reset_index(drop=True)
+
+        # deduplica a lista informativa de chaves para não inflar o alerta.
+        duplicados_df = pd.DataFrame(registros_duplicados)
+        if not duplicados_df.empty:
+            duplicados_df = duplicados_df.drop_duplicates()
+            duplicados = duplicados_df.to_dict(orient="records")
         else:
-            df_combinado = df_combinado.drop_duplicates(keep="last").reset_index(drop=True)
+            duplicados = []
 
-        with DatabaseManager._get_conn() as conn:
-            df_combinado.to_sql(nome_tabela, conn, if_exists="replace", index=False)
-        
-        st.session_state[nome_tabela] = df_combinado
+        DatabaseManager._gravar_atomico(nome_tabela, df_final)
+        st.session_state[nome_tabela] = df_final.copy()
         return len(df_novo), len(duplicados), duplicados
 
     @staticmethod
     def obter(nome_tabela: str) -> pd.DataFrame:
+        DatabaseManager._validar_tabela(nome_tabela)
         if nome_tabela not in st.session_state or st.session_state[nome_tabela].empty:
             with DatabaseManager._get_conn() as conn:
                 try:
-                    st.session_state[nome_tabela] = pd.read_sql(f"SELECT * FROM {nome_tabela}", conn)
-                except Exception:
+                    st.session_state[nome_tabela] = pd.read_sql(f'SELECT * FROM "{nome_tabela}"', conn)
+                except (sqlite3.OperationalError, pd.errors.DatabaseError):
                     st.session_state[nome_tabela] = pd.DataFrame()
-        return st.session_state.get(nome_tabela, pd.DataFrame())
+        # Não exponha o DataFrame de session_state para mutação acidental por telas.
+        return st.session_state.get(nome_tabela, pd.DataFrame()).copy()
 
     @staticmethod
     def limpar_tabela(nome_tabela: str):
+        DatabaseManager._validar_tabela(nome_tabela)
         with DatabaseManager._get_conn() as conn:
-            conn.execute(f"DROP TABLE IF EXISTS {nome_tabela}")
+            conn.execute(f'DROP TABLE IF EXISTS "{nome_tabela}"')
         st.session_state[nome_tabela] = pd.DataFrame()
 
-DatabaseManager.inicializar()
+# Carrega o banco uma vez por sessão (antes relia as 9 tabelas a cada clique).
+if not st.session_state.get("_db_inicializado"):
+    DatabaseManager.inicializar()
+    st.session_state["_db_inicializado"] = True
 
 # ==============================================================================
 # 2. SISTEMA DE AVISOS VISUAIS
 # ==============================================================================
+def _mensagem_html_segura(msg):
+    """Escapa texto externo; permite somente algumas tags de formatação conhecidas."""
+    texto = html_escape(str(msg))
+    texto = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", texto)
+    # Mantém apenas tags simples que já são utilizadas por mensagens internas.
+    for tag in ("br", "b", "/b", "strong", "/strong", "em", "/em"):
+        texto = texto.replace(f"&lt;{tag}&gt;", f"<{tag}>")
+    return texto
+
+
+def fmt_int(n):
+    """Inteiro com ponto de milhar (1.234.567). Formata SÓ o número, sem mexer no HTML ao redor."""
+    try:
+        return f"{int(round(float(n))):,}".replace(",", ".")
+    except (TypeError, ValueError):
+        return "0"
+
+
 def show_warning(msg):
-    st.markdown(f'<div style="background-color: #FFFBEB; border: 1px solid #FEF3C7; border-left: 6px solid #F59E0B; padding: 14px 18px; border-radius: 8px; color: #92400E; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">⚠️ &nbsp; {msg}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: #FFFBEB; border: 1px solid #FEF3C7; border-left: 6px solid #F59E0B; padding: 14px 18px; border-radius: 8px; color: #92400E; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">⚠️ &nbsp; {_mensagem_html_segura(msg)}</div>', unsafe_allow_html=True)
 
 def show_info(msg):
-    st.markdown(f'<div style="background-color: #EFF6FF; border: 1px solid #DBEAFE; border-left: 6px solid #3B82F6; padding: 14px 18px; border-radius: 8px; color: #1E3A8A; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">ℹ️ &nbsp; {msg}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: #EFF6FF; border: 1px solid #DBEAFE; border-left: 6px solid #3B82F6; padding: 14px 18px; border-radius: 8px; color: #1E3A8A; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">ℹ️ &nbsp; {_mensagem_html_segura(msg)}</div>', unsafe_allow_html=True)
 
 def show_success(msg):
-    st.markdown(f'<div style="background-color: #F0FDF4; border: 1px solid #DCFCE7; border-left: 6px solid #22C55E; padding: 14px 18px; border-radius: 8px; color: #166534; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">✅ &nbsp; {msg}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: #F0FDF4; border: 1px solid #DCFCE7; border-left: 6px solid #22C55E; padding: 14px 18px; border-radius: 8px; color: #166534; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">✅ &nbsp; {_mensagem_html_segura(msg)}</div>', unsafe_allow_html=True)
 
 def show_error(msg):
-    st.markdown(f'<div style="background-color: #FEF2F2; border: 1px solid #FEE2E2; border-left: 6px solid #EF4444; padding: 14px 18px; border-radius: 8px; color: #991B1B; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">❌ &nbsp; {msg}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: #FEF2F2; border: 1px solid #FEE2E2; border-left: 6px solid #EF4444; padding: 14px 18px; border-radius: 8px; color: #991B1B; font-size: 15px; font-weight: 600; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">❌ &nbsp; {_mensagem_html_segura(msg)}</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # 3. ÍCONES VETORIAIS SVG
@@ -161,7 +304,6 @@ SVG_ICONS = {
 # ==============================================================================
 # 4. ESTILO VISUAL RESPONSIVO, CSS GLOBAL E CONTRASTE DARK/LIGHT
 # ==============================================================================
-st.set_page_config(page_title="Granja 117 - Controle Operacional", page_icon="🥚", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
@@ -483,7 +625,7 @@ MAP_CPO = {
 
 PADRAO_OBI = ["01-OVO NINHO NORMAL", "02-OVO NINHO SUJO", "03-OVO DE CAMA"]
 PADRAO_COMERCIAL = ["04-OVO DUAS GEMAS GJA", "05-OVO TRINCADO GJA", "06-OVO SUJO GJA", "08-OVO INDUSTRIAL GJA", "12-OVO DEFORMADO GJA", "13-OVO LIMPO GJA"]
-PADRAO_ORDEM = PADRAO_OBI + PADRAO_COMERCIAL + ["09-OVO PERDIDO"]
+PADRAO_ORDEM = PADRAO_OBI + PADRAO_COMERCIAL + ["09-OVO PERDIDO", "Outros"]
 
 def encurtar_nome_coluna(col_name):
     texto = str(col_name)
@@ -492,40 +634,130 @@ def encurtar_nome_coluna(col_name):
         return f"NP{match.group(1)}-{match.group(2)}"
     return texto
 
-def normalizar_data_str(val, ano_padrao="2026"):
-    if val is None or pd.isna(val): return ""
-    if isinstance(val, (pd.Timestamp, datetime)): return val.strftime("%d/%m/%Y")
-    s = str(val).strip().lower()
-    m_full = re.match(r'^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$', s)
+def normalizar_data_str(val, ano_padrao=None):
+    """Normaliza datas para dd/mm/aaaa, validando datas de calendário.
+
+    Se uma planilha trouxer somente dia e mês, usa o ano corrente (ou ano_padrao
+    explicitamente informado). Para datas reconhecidas como inválidas, retorna
+    string vazia em vez de persistir uma data impossível.
+    """
+    if val is None or pd.isna(val):
+        return ""
+    if isinstance(val, (pd.Timestamp, datetime, date)):
+        try:
+            return val.strftime("%d/%m/%Y")
+        except (ValueError, TypeError):
+            return ""
+
+    ano_fallback = int(ano_padrao or datetime.now().year)
+    s = str(val).strip()
+    if not s:
+        return ""
+    s_lower = s.lower()
+
+    m_full = re.match(r"^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$", s_lower)
     if m_full:
-        d, m, y = m_full.groups()
-        if len(y) == 2: y = "20" + y
-        return f"{int(d):02d}/{int(m):02d}/{y}"
-    meses = {"jan": "01", "fev": "02", "mar": "03", "abr": "04", "mai": "05", "jun": "06", "jul": "07", "ago": "08", "set": "09", "out": "10", "nov": "11", "dez": "12"}
+        dia, mes, ano = m_full.groups()
+        if len(ano) == 2:
+            ano = "20" + ano
+        try:
+            return datetime(int(ano), int(mes), int(dia)).strftime("%d/%m/%Y")
+        except ValueError:
+            return ""
+
+    meses = {
+        "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+        "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12,
+    }
     for mes_txt, mes_num in meses.items():
-        if mes_txt in s:
-            dia_match = re.search(r'\b(\d{1,2})\b', s)
-            if dia_match: return f"{int(dia_match.group(1)):02d}/{mes_num}/{ano_padrao}"
+        if mes_txt in s_lower:
+            dia_match = re.search(r"\b(\d{1,2})\b", s_lower)
+            numeros = re.findall(r"\b(\d{4}|\d{1,2})\b", s_lower)
+            if dia_match:
+                dia_txt = dia_match.group(1)
+                dia = int(dia_txt)
+                ano = ano_fallback
+                candidatos_ano = [n for n in numeros if n != dia_txt and len(n) in (2, 4)]
+                if candidatos_ano:
+                    # Prefere ano com quatro dígitos e evita confundir o dia com o ano.
+                    ano_txt = next((n for n in candidatos_ano if len(n) == 4), candidatos_ano[-1])
+                    ano = int("20" + ano_txt) if len(ano_txt) == 2 else int(ano_txt)
+                try:
+                    dt_mes = datetime(ano, mes_num, dia)
+                except ValueError:
+                    return ""
+                # Sem ano na planilha ("28/dez" lida em janeiro): se a data cair a mais de
+                # ~6 meses no futuro, ela é do ano anterior.
+                if not candidatos_ano and ano_padrao is None and dt_mes > datetime.now() + timedelta(days=180):
+                    try:
+                        dt_mes = dt_mes.replace(year=ano - 1)
+                    except ValueError:
+                        pass
+                return dt_mes.strftime("%d/%m/%Y")
+
     try:
-        dt = pd.to_datetime(s, dayfirst=True)
+        dt = pd.to_datetime(s, dayfirst=True, errors="raise")
         return dt.strftime("%d/%m/%Y")
-    except Exception: return str(val).strip()
+    except (ValueError, TypeError, OverflowError):
+        # Não inventa uma data a partir de um texto que não conseguiu interpretar.
+        return ""
+
+
+def chave_ordenacao_data(valor):
+    """Chave cronológica para datas armazenadas como dd/mm/aaaa."""
+    try:
+        return datetime.strptime(str(valor), "%d/%m/%Y")
+    except (ValueError, TypeError):
+        return datetime.min
 
 def mapear_categoria_mtech(texto):
-    if not texto or pd.isna(texto): return "Outros"
+    """Mapeia nomes/códigos do MTech sem classificar palavras pelo prefixo acidental."""
+    if texto is None or pd.isna(texto):
+        return "Outros"
     t = str(texto).upper().strip()
+    if not t:
+        return "Outros"
 
-    if "DUAS GEMAS" in t or re.search(r'\bDG\b', t) or t.startswith("DG"): return "Duas Gemas"
-    if "DEFORMADO" in t or re.search(r'\bDF\b', t) or t.startswith("DF"): return "Deformado"
-    if "TRINCADO" in t or "MICRO" in t or re.search(r'\bTR\b', t) or t.startswith("TR"): return "Trincado"
-    if "INDUSTRIAL" in t or re.search(r'\bID\b', t) or t.startswith("ID"): return "Industrial"
-    if "NINHO SUJO" in t or re.search(r'\bNS\b', t) or t.startswith("NS"): return "Ninho Sujo"
-    if "SUJO" in t or re.search(r'\bSJ\b', t) or t.startswith("SJ"): return "Sujo"
-    if "CAMA" in t or re.search(r'\bCM\b', t) or t.startswith("CM"): return "Cama"
-    if t == "NN" or re.search(r'\bNN\b', t) or "NINHO NORMAL" in t: return "Ninho Normal"
-    if "LIMPO" in t or re.search(r'\bLP\b', t) or t.startswith("LP"): return "Ovo Limpo"
-    if "PERDIDO" in t or "QUEBRA" in t or t == "PR" or re.search(r'\bPR\b', t) or t.startswith("PR"): return "Perda Galpão"
+    # Primeiro, descrições completas. Depois, códigos no início do texto, desde
+    # que estejam separados por espaço/pontuação (ex.: "DG - OVO").
+    if "DUAS GEMAS" in t:
+        return "Duas Gemas"
+    if "DEFORMADO" in t:
+        return "Deformado"
+    if "TRINCADO" in t or "MICRO" in t:
+        return "Trincado"
+    if "INDUSTRIAL" in t:
+        return "Industrial"
+    if "NINHO SUJO" in t:
+        return "Ninho Sujo"
+    if "SUJO" in t:
+        return "Sujo"
+    if "CAMA" in t:
+        return "Cama"
+    if "NINHO NORMAL" in t:
+        return "Ninho Normal"
+    if "LIMPO" in t:
+        return "Ovo Limpo"
+    if "PERDIDO" in t or "QUEBRA" in t:
+        return "Perda Galpão"
 
+    texto_codificado = re.sub(r"[^A-Z0-9]+", " ", t).strip()
+    tokens = set(texto_codificado.split())
+    mapa_codigos = {
+        "DG": "Duas Gemas",
+        "DF": "Deformado",
+        "TR": "Trincado",
+        "ID": "Industrial",
+        "NS": "Ninho Sujo",
+        "SJ": "Sujo",
+        "CM": "Cama",
+        "NN": "Ninho Normal",
+        "LP": "Ovo Limpo",
+        "PR": "Perda Galpão",
+    }
+    for codigo, categoria in mapa_codigos.items():
+        if codigo in tokens:
+            return categoria
     return "Outros"
 
 def safe_int(val):
@@ -541,6 +773,7 @@ def parse_reclassificacao_cpo(file_bytes):
     data_proc = normalizar_data_str(ws["C2"].value)
     resp = ws["G2"].value or ws["H2"].value or "Não informado"
     linhas = []
+    ignoradas = 0
     secao_atual = "NN"
 
     for r in range(4, ws.max_row + 1):
@@ -610,9 +843,13 @@ def parse_reclassificacao_cpo(file_bytes):
                 v_def = safe_int(ws_p.cell(r, 6).value); v_sujo = safe_int(ws_p.cell(r, 7).value); v_ind = safe_int(ws_p.cell(r, 8).value); v_dg = safe_int(ws_p.cell(r, 9).value); v_trinc = safe_int(ws_p.cell(r, 10).value)
                 if (v_nn + v_cama + v_ns + v_def + v_sujo + v_ind + v_dg + v_trinc) > 0:
                     linhas.append({"Data_Processamento": data_proc, "Data_Postura": dt_post, "Lote": lote_num, "Origem": "Ovos Perdidos (Aba)", "Saldo_Inicial": 0, "Sujo": 0, "Deformado": 0, "Ninho_Sujo": 0, "Industrial": 0, "Duas_Gemas": 0, "Ovo_Limpo": 0, "Trincado": 0, "Microtrincado": 0, "Total_Destinos": 0, "Total_Classificado": 0, "Saldo_Final": 0, "Responsavel": str(resp), "P_NN": v_nn, "P_Cama": v_cama, "P_NS": v_ns, "P_Def": v_def, "P_Sujo": v_sujo, "P_Ind": v_ind, "P_DG": v_dg, "P_Trinc": v_trinc, "Trincado_Baixa": 0})
-            except Exception: pass
+            except Exception as exc:
+                ignoradas += 1
+                logging.warning("Linha %s ignorada por conter valores inválidos: %s", r + 1, exc)
 
-    return pd.DataFrame(linhas)
+    df_out = pd.DataFrame(linhas)
+    df_out.attrs["linhas_ignoradas"] = ignoradas
+    return df_out
 
 def parse_producao_erp(file_bytes):
     df = pd.read_excel(io.BytesIO(file_bytes))
@@ -666,31 +903,132 @@ def parse_reclassificacao_mtech(file_bytes):
     df = df.groupby(cols_agrupar, dropna=False, as_index=False)["Ovos"].sum()
     return df
 
-def parse_descarte_mtech(file_bytes):
+def _normalizar_cabecalho_coluna(valor):
+    """Normaliza acentos e pontuação para reconhecer nomes de colunas com segurança."""
+    texto = unicodedata.normalize("NFKD", str(valor)).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^A-Z0-9]+", " ", texto.upper()).strip()
+
+
+def _escolher_coluna_quantidade_descarte(colunas):
+    """Escolhe a quantidade descartada, evitando saldo/produção/estoque.
+
+    A escolha é deliberadamente conservadora: em caso de ambiguidade, falha em vez
+    de comparar o saldo de produção como se fosse quantidade descartada.
+    """
+    descartes = ("DESCART", "BAIXA", "PERDA", "PERDID", "QUEBRA", "TRINC")
+    termos_quantidade = ("OVO", "QTD", "QTDE", "QUANT", "QUANTIDADE", "TOTAL")
+    termos_excluir = (
+        "SALDO", "ESTOQUE", "PRODUCAO", "PRODUZID", "DISPONIVEL",
+        "RESTANTE", "INICIAL", "FINAL", "TRANSACAO", "CODIGO", "COD TRANS",
+    )
+
+    normalizados = {col: _normalizar_cabecalho_coluna(col) for col in colunas}
+
+    def elegivel(nome_norm):
+        return not any(termo in nome_norm for termo in termos_excluir)
+
+    # Primeiro: colunas que nomeiam explicitamente a baixa/perda/descarte.
+    explicitamente_descarte = [
+        col for col, norm in normalizados.items()
+        if elegivel(norm)
+        and any(termo in norm for termo in descartes)
+        and any(termo in norm for termo in termos_quantidade)
+    ]
+    if len(explicitamente_descarte) == 1:
+        return explicitamente_descarte[0]
+    if len(explicitamente_descarte) > 1:
+        # Escolhe somente quando uma coluna se destaca claramente por especificidade.
+        ranking = {
+            col: (sum(2 for t in descartes if t in normalizados[col])
+                  + sum(1 for t in termos_quantidade if t in normalizados[col]))
+            for col in explicitamente_descarte
+        }
+        melhor = max(ranking.values())
+        vencedores = [col for col, score in ranking.items() if score == melhor]
+        if len(vencedores) == 1:
+            return vencedores[0]
+        raise ValueError(
+            "Há mais de uma coluna de quantidade de descarte/perda: "
+            + ", ".join(map(str, vencedores))
+            + ". Não foi importado para evitar usar o saldo errado."
+        )
+
+    # Segundo: nomes genéricos usuais, excluindo explicitamente saldo/produção.
+    aliases = {
+        "OVO": 60, "OVOS": 60, "QTD": 55, "QTDE": 55,
+        "QUANTIDADE": 55, "TOTAL OVOS": 58, "TOTAL DE OVOS": 58,
+        "QTD OVOS": 62, "QTDE OVOS": 62, "QUANTIDADE OVOS": 63,
+        "QUANTIDADE DE OVOS": 63,
+    }
+    candidatas = []
+    for col, norm in normalizados.items():
+        if not elegivel(norm):
+            continue
+        if norm in aliases:
+            candidatas.append((aliases[norm], col))
+        elif any(t in norm for t in ("OVO", "QTD", "QTDE", "QUANTIDADE")):
+            # Colunas genéricas como "Quantidade movimento" podem ser usadas apenas
+            # se forem a única opção que não representa saldo ou produção.
+            candidatas.append((40, col))
+
+    if not candidatas:
+        raise ValueError(
+            "Não encontrei uma coluna segura de quantidade descartada. "
+            "Use uma coluna identificada como descarte/baixa/perda ou uma coluna "
+            "genérica 'Ovos'/'Quantidade', sem coluna de saldo ou produção ambígua."
+        )
+    melhor = max(score for score, _ in candidatas)
+    vencedoras = [col for score, col in candidatas if score == melhor]
+    if len(vencedoras) != 1:
+        raise ValueError(
+            "Não consegui identificar com segurança a coluna de quantidade de descarte. "
+            "Colunas candidatas: " + ", ".join(map(str, vencedoras))
+            + ". A importação foi interrompida para não tratar saldo/produção como descarte."
+        )
+    return vencedoras[0]
+
+
+def parse_descarte_mtech(file_bytes, nome_arquivo=""):
     df = pd.read_excel(io.BytesIO(file_bytes))
     df.columns = [str(c).strip() for c in df.columns]
-    
-    lote_col = next((c for c in df.columns if "LOTE" in c.upper()), "Nº Lote")
-    prod_col = next((c for c in df.columns if "PRODUTO" in c.upper() or "ITEM" in c.upper() or "DESCR" in c.upper()), "Produto")
-    ovos_col = next((c for c in df.columns if "OVO" in c.upper() and "TRANS" not in c.upper() and "COD" not in c.upper() and "CÓD" not in c.upper()), "Ovos")
-    prod_dt_col = next((c for c in df.columns if "DATA PRODU" in c.upper() or "DATA POSTURA" in c.upper() or ("PRODU" in c.upper() and "DATA" in c.upper())), "Data Produção")
-    trans_dt_col = next((c for c in df.columns if ("DATA" in c.upper() and "TRANS" in c.upper()) or ("DATA" in c.upper() and "MOVIM" in c.upper())), "Data Transação")
+    if df.empty:
+        raise ValueError("A planilha de descarte está vazia.")
 
-    df = df.dropna(subset=[lote_col, ovos_col])
-    
+    lote_col = next((c for c in df.columns if "LOTE" in _normalizar_cabecalho_coluna(c)), None)
+    prod_col = next((c for c in df.columns if any(t in _normalizar_cabecalho_coluna(c) for t in ("PRODUTO", "ITEM", "DESCRICAO", "DESCR"))), None)
+    ovos_col = _escolher_coluna_quantidade_descarte(df.columns)
+    prod_dt_col = next((c for c in df.columns if "DATA PRODU" in _normalizar_cabecalho_coluna(c) or "DATA POSTURA" in _normalizar_cabecalho_coluna(c)), None)
+    trans_dt_col = next((c for c in df.columns if ("DATA" in _normalizar_cabecalho_coluna(c) and "TRANS" in _normalizar_cabecalho_coluna(c)) or ("DATA" in _normalizar_cabecalho_coluna(c) and "MOVIM" in _normalizar_cabecalho_coluna(c))), None)
+
+    if lote_col is None:
+        raise ValueError("Não encontrei a coluna de lote na planilha de descarte.")
+    if prod_col is None:
+        raise ValueError("Não encontrei a coluna de produto/descrição na planilha de descarte.")
+
+    df = df.dropna(subset=[lote_col, ovos_col]).copy()
     df["Nº Lote"] = df[lote_col].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
-    df["Produto"] = df[prod_col].astype(str) if prod_col in df.columns else ""
-    df["Ovos"] = pd.to_numeric(df[ovos_col], errors='coerce').fillna(0).astype(int)
-    df["Data Produção"] = df[prod_dt_col].apply(normalizar_data_str) if prod_dt_col in df.columns else ""
-    df["Data Transação"] = df[trans_dt_col].apply(normalizar_data_str) if trans_dt_col in df.columns else ""
-    
-    cols_agrupar = ["Nº Lote", "Produto", "Data Produção", "Data Transação"]
+    df["Produto"] = df[prod_col].astype(str).str.strip()
+    df["Ovos"] = pd.to_numeric(df[ovos_col], errors="coerce")
+    df = df[df["Ovos"].notna()].copy()
+    df["Ovos"] = df["Ovos"].round().astype(int)
+    df["Data Produção"] = df[prod_dt_col].apply(normalizar_data_str) if prod_dt_col else ""
+    df["Data Transação"] = df[trans_dt_col].apply(normalizar_data_str) if trans_dt_col else ""
+
+    # Mantém rastreabilidade: a validação ignora automaticamente registros legados
+    # que foram importados antes de registrar a coluna usada para quantidade.
+    df["Coluna_Quantidade_Origem"] = str(ovos_col)
+    df["Arquivo_Origem"] = os.path.basename(str(nome_arquivo)) if nome_arquivo else "Não informado"
+
+    cols_agrupar = ["Nº Lote", "Produto", "Data Produção", "Data Transação", "Coluna_Quantidade_Origem", "Arquivo_Origem"]
     df = df.groupby(cols_agrupar, dropna=False, as_index=False)["Ovos"].sum()
+    if df.empty:
+        raise ValueError("Nenhuma linha válida de descarte foi extraída da planilha.")
     return df
 
 def parse_vendas_romaneios(file_bytes):
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
     vendas = []
+    ignoradas = 0
     for cliente_aba in xls.sheet_names:
         df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=cliente_aba)
         if len(df) > 8 and df.shape[1] >= 8:
@@ -702,12 +1040,17 @@ def parse_vendas_romaneios(file_bytes):
                 if pd.notna(dt_post) and pd.notna(lote) and pd.notna(ovos):
                     try:
                         if int(float(ovos)) > 0: vendas.append({"Data_Expedicao": data_exp, "Cliente": str(cliente_nome), "Destino": str(destino), "Data_Postura": normalizar_data_str(dt_post), "Lote": str(int(float(lote))), "Tipo_Ovo": str(tipo), "Caixas_360": float(caixas), "Quantidade_Ovos": int(float(ovos))})
-                    except Exception: pass
-    return pd.DataFrame(vendas)
+                    except Exception as exc:
+                        ignoradas += 1
+                        logging.warning("Linha %s ignorada por conter valores inválidos: %s", r + 1, exc)
+    df_out = pd.DataFrame(vendas)
+    df_out.attrs["linhas_ignoradas"] = ignoradas
+    return df_out
 
 def parse_transferencias_incubatorio(file_bytes):
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
     transf = []
+    ignoradas = 0
     for aba in xls.sheet_names:
         if aba.upper() in ["DICAS", "VEICULOS"]: continue
         df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=aba)
@@ -719,8 +1062,12 @@ def parse_transferencias_incubatorio(file_bytes):
                 if pd.notna(lote) and pd.notna(qtd):
                     try:
                         if int(float(qtd)) > 0: transf.append({"Aba_Destino": aba, "Origem": str(origem), "Destino": str(destino), "Data_Expedicao": data_exp, "Palete": str(palete), "Lote": str(int(float(lote))), "Data_Postura": normalizar_data_str(dt_post), "Categoria": str(categoria), "Quantidade_Ovos": int(float(qtd)), "Observacao": str(obs) if pd.notna(obs) else ""})
-                    except Exception: pass
-    return pd.DataFrame(transf)
+                    except Exception as exc:
+                        ignoradas += 1
+                        logging.warning("Linha %s ignorada por conter valores inválidos: %s", r + 1, exc)
+    df_out = pd.DataFrame(transf)
+    df_out.attrs["linhas_ignoradas"] = ignoradas
+    return df_out
 
 def parse_estoque_mtech(file_bytes):
     df_raw = pd.read_excel(io.BytesIO(file_bytes), header=None)
@@ -732,16 +1079,19 @@ def parse_estoque_mtech(file_bytes):
             break
     df = pd.read_excel(io.BytesIO(file_bytes), skiprows=header_idx) if header_idx is not None else pd.read_excel(io.BytesIO(file_bytes))
     df.columns = [str(c).strip().upper() for c in df.columns]
-    prod_col = next((c for c in df.columns if "NOME PRODUTO" in c or "PRODUTO" in c), "NOME PRODUTO")
-    qtd_col = next((c for c in df.columns if "OVOS" in c or "QTD" in c), "OVOS")
+    prod_col = next((c for c in df.columns if "NOME PRODUTO" in c or "PRODUTO" in c), None)
+    qtd_col = next((c for c in df.columns if "OVOS" in c or "QTD" in c), None)
+    if prod_col is None or qtd_col is None:
+        raise ValueError("Relatório MTech não contém as colunas de produto e quantidade de ovos esperadas.")
     
-    df[prod_col] = df[prod_col].astype(str).str.strip()
+    df[prod_col] = df[prod_col].fillna("").astype(str).str.strip()
     df[qtd_col] = pd.to_numeric(df[qtd_col], errors="coerce").fillna(0).astype(int)
     
     # Soma todas as linhas do mesmo produto (garante 382 para Industrial, sem descarte de linhas com qtd diferente)
     res = df.groupby(prod_col, as_index=False)[qtd_col].sum()
     res.columns = ["Produto_Original", "Quantidade"]
-    return res[res["Quantidade"] != 0]
+    res = res[(res["Produto_Original"] != "") & (res["Quantidade"] != 0)]
+    return res
 
 def parse_sankhya(file_bytes):
     df_raw = pd.read_excel(io.BytesIO(file_bytes), header=None)
@@ -753,13 +1103,17 @@ def parse_sankhya(file_bytes):
             break
     df = pd.read_excel(io.BytesIO(file_bytes), skiprows=header_idx) if header_idx is not None else pd.read_excel(io.BytesIO(file_bytes))
     df.columns = [str(c).strip().upper() for c in df.columns]
-    prod_col = next((c for c in df.columns if "PRODUTO" in c or "DESC" in c), "PRODUTO")
-    qtd_col = next((c for c in df.columns if "ESTOQUE" in c or "QTD" in c), "ESTOQUE")
+    prod_col = next((c for c in df.columns if "PRODUTO" in c or "DESC" in c), None)
+    qtd_col = next((c for c in df.columns if "ESTOQUE" in c or "QTD" in c), None)
+    if prod_col is None or qtd_col is None:
+        raise ValueError("Relatório Sankhya não contém as colunas de produto e estoque esperadas.")
     
     res = pd.DataFrame()
-    res["Produto_Original"] = df[prod_col].astype(str).str.strip()
+    res["Produto_Original"] = df[prod_col].fillna("").astype(str).str.strip()
     res["Quantidade"] = pd.to_numeric(df[qtd_col], errors="coerce").fillna(0).astype(int)
-    return res[res["Quantidade"] != 0]
+    res = res[(res["Produto_Original"] != "") & (res["Quantidade"] != 0)]
+    res = res.groupby("Produto_Original", as_index=False, dropna=False)["Quantidade"].sum()
+    return res
 
 def parse_estoque_cpo(file_bytes, resumo_sheet):
     df_raw = pd.read_excel(io.BytesIO(file_bytes), sheet_name=resumo_sheet, header=None)
@@ -771,37 +1125,85 @@ def parse_estoque_cpo(file_bytes, resumo_sheet):
             break
     df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=resumo_sheet, skiprows=header_idx) if header_idx is not None else pd.read_excel(io.BytesIO(file_bytes), sheet_name=resumo_sheet)
     df.columns = [str(c).strip().upper() for c in df.columns]
+    if len(df.columns) < 2:
+        raise ValueError("A aba RESUMO do CPO precisa conter coluna de categoria e quantidade.")
     cat_col = next((c for c in df.columns if "CATEGORIA" in c), df.columns[0])
     qtd_col = next((c for c in df.columns if "QUANTIDADE" in c or "TOTAL" in c), df.columns[1])
     
     res = pd.DataFrame()
-    res["Categoria_Original"] = df[cat_col].astype(str).str.strip()
+    res["Categoria_Original"] = df[cat_col].fillna("").astype(str).str.strip()
     res["Quantidade"] = pd.to_numeric(df[qtd_col], errors="coerce").fillna(0).astype(int)
     res = res[~res["Categoria_Original"].str.upper().str.contains("TOTAL")]
-    return res[res["Quantidade"] != 0]
+    res = res[(res["Categoria_Original"] != "") & (res["Quantidade"] != 0)]
+    res = res.groupby("Categoria_Original", as_index=False, dropna=False)["Quantidade"].sum()
+    return res
+
+def normalizar_arquivo_excel(file_bytes, nome_arquivo=""):
+    """Converte Excel binário antigo (.xls) para .xlsx em memória, se xlrd existir.
+
+    Apenas os valores são preservados; para relatórios operacionais sem dependência
+    de formatação, isso mantém a grade de linhas/colunas usada pelos parsers.
+    """
+    if not str(nome_arquivo).lower().endswith(".xls") or str(nome_arquivo).lower().endswith(".xlsx"):
+        return file_bytes
+    try:
+        import xlrd
+    except ImportError as exc:
+        raise ValueError(
+            "O arquivo .xls antigo requer a dependência 'xlrd'. Instale-a com "
+            "pip install xlrd ou salve o arquivo como .xlsx no Excel."
+        ) from exc
+
+    livro_antigo = xlrd.open_workbook(file_contents=file_bytes)
+    livro_novo = openpyxl.Workbook()
+    livro_novo.remove(livro_novo.active)
+    for folha_antiga in livro_antigo.sheets():
+        folha_nova = livro_novo.create_sheet(title=folha_antiga.name[:31])
+        for row_idx in range(folha_antiga.nrows):
+            for col_idx in range(folha_antiga.ncols):
+                cel = folha_antiga.cell(row_idx, col_idx)
+                valor = cel.value
+                if cel.ctype == xlrd.XL_CELL_DATE:
+                    valor = xlrd.xldate.xldate_as_datetime(valor, livro_antigo.datemode)
+                elif cel.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                    valor = None
+                folha_nova.cell(row=row_idx + 1, column=col_idx + 1, value=valor)
+    saida = io.BytesIO()
+    livro_novo.save(saida)
+    return saida.getvalue()
+
+
+def salvar_importacao_validada(nome_tabela, df, substituir=False):
+    """Evita que arquivo não interpretado sobrescreva histórico válido."""
+    if df is None or df.empty:
+        acao = "O histórico anterior foi preservado" if substituir else "Nenhum registro foi gravado"
+        raise ValueError(f"A planilha foi reconhecida, mas nenhum registro válido foi extraído. {acao}.")
+    # Guarda quantas linhas o parser descartou, para a tela de carga avisar o usuário.
+    st.session_state["_linhas_ignoradas_ultima"] = int(df.attrs.get("linhas_ignoradas", 0))
+    n, dups, _ = DatabaseManager.salvar(nome_tabela, df, substituir=substituir)
+    return n, dups
+
 
 def inspecionar_e_processar_conteudo(uploaded_file):
     nome_arquivo = getattr(uploaded_file, "name", "").lower()
-    file_bytes = uploaded_file.getvalue()
+    file_bytes = normalizar_arquivo_excel(uploaded_file.getvalue(), nome_arquivo)
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
     abas_lower = [s.lower().strip() for s in xls.sheet_names]
 
     resumo_sheet = next((s for s in xls.sheet_names if s.upper().strip() == "RESUMO"), None)
     if resumo_sheet and not any("classifica" in s for s in abas_lower):
         df = parse_estoque_cpo(file_bytes, resumo_sheet)
-        if not df.empty:
-            DatabaseManager.limpar_tabela("df_est_cpo")
-            n, dups, _ = DatabaseManager.salvar("df_est_cpo", df)
-            return "Controle Físico de Estoque (CPO)", n, dups
+        n, dups = salvar_importacao_validada("df_est_cpo", df, substituir=True)
+        return "Controle Físico de Estoque (CPO)", n, dups
 
     if any("classifica" in s for s in abas_lower) or "cpo" in nome_arquivo:
         df = parse_reclassificacao_cpo(file_bytes)
-        n, dups, _ = DatabaseManager.salvar("df_reclass", df)
+        n, dups = salvar_importacao_validada("df_reclass", df)
         return "Ficha de Reclassificação CPO", n, dups
 
     if any(s in ["dicas", "veiculos", "veículos"] for s in abas_lower):
         df = parse_transferencias_incubatorio(file_bytes)
-        n, dups, _ = DatabaseManager.salvar("df_transf", df)
+        n, dups = salvar_importacao_validada("df_transf", df)
         return "Romaneio de Transferência OBI", n, dups
 
     df_amostra = pd.read_excel(io.BytesIO(file_bytes), sheet_name=0)
@@ -810,61 +1212,79 @@ def inspecionar_e_processar_conteudo(uploaded_file):
 
     if "SKU" in texto_interno and ("ESTOQUE" in texto_interno or "CÓD. EMP." in texto_interno):
         df = parse_sankhya(file_bytes)
-        DatabaseManager.limpar_tabela("df_est_sankhya")
-        n, dups, _ = DatabaseManager.salvar("df_est_sankhya", df)
+        n, dups = salvar_importacao_validada("df_est_sankhya", df, substituir=True)
         return "Estoque Fiscal (Sankhya)", n, dups
 
     if "BIM ESTOQUE SALA OVOS" in texto_interno or ("NOME CLASSE OVO" in texto_interno and "IDADE MATRIZ" in texto_interno):
         df = parse_estoque_mtech(file_bytes)
-        DatabaseManager.limpar_tabela("df_est_mtech")
-        n, dups, _ = DatabaseManager.salvar("df_est_mtech", df)
+        n, dups = salvar_importacao_validada("df_est_mtech", df, substituir=True)
         return "Estoque Origem (MTech)", n, dups
 
-    is_reclassificacao_mtech = (
-        any("TRANS OVO" in c for c in cols_upper) or
-        "DÉBITO" in texto_interno or "CRÉDITO" in texto_interno or
-        "DEBITO" in texto_interno or "CREDITO" in texto_interno
-    )
-
-    if is_reclassificacao_mtech:
-        df = parse_reclassificacao_mtech(file_bytes)
-        n, dups, _ = DatabaseManager.salvar("df_rec_mtech", df)
-        return "Lançamento de Reclassificação", n, dups
-
+    # Classificação conservadora do arquivo: não tratar uma exportação genérica
+    # com lote/data de transação como descarte só por conter essas colunas.
     tem_lote = any("LOTE" in c for c in cols_upper)
     tem_fazenda = any("FAZENDA" in c for c in cols_upper)
     tem_transacao = any("TRANS" in c or "MOVIM" in c for c in cols_upper)
 
-    indica_descarte = (
+    descarte_nome_ou_aba = (
         any(k in nome_arquivo for k in ["descarte", "baixa", "perda", "quebra", "desc"]) or
-        any(k in s for s in abas_lower for k in ["descarte", "baixa", "perda"]) or
-        any("DESCARTE" in c or "BAIXA" in c for c in cols_upper) or
-        "DESCARTE" in texto_interno
+        any(any(k in aba for k in ["descarte", "baixa", "perda", "quebra", "desc"]) for aba in abas_lower)
     )
+    descarte_coluna_clara = any(any(k in c for k in ["DESCARTE", "BAIXA"]) for c in cols_upper)
+    coluna_perda_quebra = any(any(k in c for k in ["PERDA", "PERDIDO", "QUEBRA", "TRINCADO"]) for c in cols_upper)
 
     indica_producao = (
         any(k in nome_arquivo for k in ["produ", "coleta", "galp"]) or
-        any(k in s for s in abas_lower for k in ["produ", "coleta", "galp"])
+        any(any(k in aba for k in ["produ", "coleta", "galp"]) for aba in abas_lower) or
+        (tem_fazenda and tem_lote)
+    )
+    # Colunas de perda/trincado também aparecem em relatórios de produção; só as tratamos
+    # como descarte quando o próprio documento não aparenta ser uma exportação de produção.
+    indica_descarte = (
+        descarte_nome_ou_aba
+        or descarte_coluna_clara
+        or (coluna_perda_quebra and not indica_producao)
     )
 
-    if indica_descarte or (tem_lote and tem_transacao and not indica_producao):
-        df = parse_descarte_mtech(file_bytes)
-        n, dups, _ = DatabaseManager.salvar("df_desc_mtech", df)
-        return "Lançamento de Descartes", n, dups
+    is_reclassificacao_mtech = (
+        any("TRANS OVO" in c for c in cols_upper) or
+        (("DÉBITO" in texto_interno or "CRÉDITO" in texto_interno or "DEBITO" in texto_interno or "CREDITO" in texto_interno)
+         and not indica_descarte)
+    )
 
-    if tem_fazenda and tem_lote:
+    # Um nome/aba/coluna que identifique descarte tem precedência sobre o nome
+    # genérico da exportação. O parser escolhe a coluna quantitativa com segurança.
+    if indica_descarte:
+        df = parse_descarte_mtech(file_bytes, nome_arquivo=nome_arquivo)
+        n, dups = salvar_importacao_validada("df_desc_mtech", df)
+        coluna_qtd = str(df["Coluna_Quantidade_Origem"].iloc[0])
+        return f"Lançamento de Descartes (quantidade lida da coluna: {coluna_qtd})", n, dups
+
+    if is_reclassificacao_mtech:
+        df = parse_reclassificacao_mtech(file_bytes)
+        n, dups = salvar_importacao_validada("df_rec_mtech", df)
+        return "Lançamento de Reclassificação", n, dups
+
+    if indica_producao:
         df = parse_producao_erp(file_bytes)
-        n, dups, _ = DatabaseManager.salvar("df_prod", df)
+        n, dups = salvar_importacao_validada("df_prod", df)
         return "Produção Diária (Núcleo)", n, dups
+
+    if tem_lote and tem_transacao:
+        raise ValueError(
+            "Arquivo com lote e data de transação, mas sem identificação explícita de descarte. "
+            "Para evitar importar saldo/produção como descarte, confira o relatório e, se for "
+            "realmente a baixa de ovos, use 'descarte' ou 'baixa' no nome do arquivo ou da aba."
+        )
 
     if "PALETE" in texto_interno or any("PALETE" in c for c in cols_upper):
         df = parse_transferencias_incubatorio(file_bytes)
-        n, dups, _ = DatabaseManager.salvar("df_transf", df)
+        n, dups = salvar_importacao_validada("df_transf", df)
         return "Romaneio de Transferência OBI", n, dups
     
     if "CLIENTE" in texto_interno or "CAIXAS" in texto_interno or any("CLIENTE" in c for c in cols_upper):
         df = parse_vendas_romaneios(file_bytes)
-        n, dups, _ = DatabaseManager.salvar("df_vendas", df)
+        n, dups = salvar_importacao_validada("df_vendas", df)
         return "Romaneio de Venda Externa", n, dups
 
     raise ValueError(f"Estrutura de ficheiro não reconhecida. Colunas: {cols_upper}")
@@ -874,7 +1294,7 @@ def inspecionar_e_processar_conteudo(uploaded_file):
 # ==============================================================================
 def render_matriz_producao_html(df_pivot):
     cols = list(df_pivot.columns)
-    headers_html = "".join([f'<th style="padding: 10px 14px; text-align: center !important; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 800; font-size: 13.5px; color: var(--text-color);">{col}</th>' for col in cols])
+    headers_html = "".join([f'<th style="padding: 10px 14px; text-align: center !important; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 800; font-size: 13.5px; color: var(--text-color);">{html_escape(str(col))}</th>' for col in cols])
     
     rows_html = []
     for idx, (prod_nome, row) in enumerate(df_pivot.iterrows()):
@@ -907,7 +1327,7 @@ def render_matriz_producao_html(df_pivot):
                 
             cells_html.append(f'<td style="{td_style}">{val_str}</td>')
             
-        rows_html.append(f'<tr style="{row_style}"><td style="{prod_cell_style}">{prod_nome}</td>{"".join(cells_html)}</tr>')
+        rows_html.append(f'<tr style="{row_style}"><td style="{prod_cell_style}">{html_escape(str(prod_nome))}</td>{"".join(cells_html)}</tr>')
         
     return f'''
     <div class="table-container-responsive">
@@ -932,19 +1352,19 @@ def render_reclass_table_html(df):
         origem_color = "#3B82F6" if r["Origem"] == "Ninho Normal" else ("#F59E0B" if r["Origem"] == "Cama" else "#10B981")
         row_str = (
             f'<tr style="background-color: {bg}; border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; border-right: 1px solid rgba(128,128,128,0.2);">{r["Data_Postura"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid rgba(128,128,128,0.3);">{r["Lote"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; color: {origem_color}; border-right: 1px solid rgba(128,128,128,0.2);">{r["Origem"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{r["Saldo_Inicial"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Sujo"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Deformado"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Ninho_Sujo"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Industrial"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Duas_Gemas"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Ovo_Limpo"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{r["Trincado"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: rgba(128,128,128,0.1); border-right: 1px solid rgba(128,128,128,0.2);">{r["Total_Destinos"]:,}'.replace(",", ".") + f'</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; color: ' + ("#EF4444" if r["Saldo_Final"] > 0 else "#22C55E") + f';">{r["Saldo_Final"]:,}'.replace(",", ".") + f'</td>'
+            f'<td style="padding: 10px 12px; border-right: 1px solid rgba(128,128,128,0.2);">{html_escape(str(r["Data_Postura"]))}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid rgba(128,128,128,0.3);">{html_escape(str(r["Lote"]))}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; color: {origem_color}; border-right: 1px solid rgba(128,128,128,0.2);">{html_escape(str(r["Origem"]))}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{fmt_int(r["Saldo_Inicial"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Sujo"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Deformado"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Ninho_Sujo"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Industrial"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Duas_Gemas"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Ovo_Limpo"])}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{fmt_int(r["Trincado"])}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: rgba(128,128,128,0.1); border-right: 1px solid rgba(128,128,128,0.2);">{fmt_int(r["Total_Destinos"])}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; color: ' + ("#EF4444" if r["Saldo_Final"] > 0 else "#22C55E") + f';">{fmt_int(r["Saldo_Final"])}</td>'
             f'</tr>'
         )
         rows_html.append(row_str)
@@ -956,18 +1376,18 @@ def render_reclass_table_html(df):
     row_total = (
         f'<tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
         f'<td colspan="3" style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">TOTAL GERAL DA SELEÇÃO</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{t_saldo:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_sujo:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_def:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_ns:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_ind:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_dg:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_limpo:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{t_trinc:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_dest:,}</td>'
-        f'<td style="padding: 12px; text-align: right;">{t_fim:,}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{fmt_int(t_saldo)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{fmt_int(t_sujo)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{fmt_int(t_def)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{fmt_int(t_ns)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{fmt_int(t_ind)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{fmt_int(t_dg)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{fmt_int(t_limpo)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{fmt_int(t_trinc)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{fmt_int(t_dest)}</td>'
+        f'<td style="padding: 12px; text-align: right;">{fmt_int(t_fim)}</td>'
         f'</tr>'
-    ).replace(",", ".")
+    )
 
     table_html = (
         '<div class="table-container-responsive">'
@@ -1007,18 +1427,18 @@ def render_descarte_table_html(df):
         bg = "rgba(128, 128, 128, 0.04)" if idx % 2 == 0 else "transparent"
         rows_html.append(
             f'<tr style="background-color: {bg}; border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; border-right: 1px solid rgba(128,128,128,0.2);">{r["Data_Postura"]}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid rgba(128,128,128,0.3);">{r["Lote"]}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 800; color: #3B82F6;">{r["Ninho Normal"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Cama"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Ninho Sujo"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Deformado"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Sujo Granja"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Industrial"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{r["Duas Gemas"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 800;">{r["Trincado"]:,}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; border-left: 2px solid rgba(128,128,128,0.3); background-color: rgba(128,128,128,0.1);">{r["TOTAL BAIXA"]:,}</td>'
-            f'</tr>'.replace(",", ".")
+            f'<td style="padding: 10px 12px; border-right: 1px solid rgba(128,128,128,0.2);">{html_escape(str(r["Data_Postura"]))}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 2px solid rgba(128,128,128,0.3);">{html_escape(str(r["Lote"]))}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 800; color: #3B82F6;">{fmt_int(r["Ninho Normal"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Cama"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Ninho Sujo"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Deformado"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Sujo Granja"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Industrial"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 600;">{fmt_int(r["Duas Gemas"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2); font-weight: 800;">{fmt_int(r["Trincado"])}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; border-left: 2px solid rgba(128,128,128,0.3); background-color: rgba(128,128,128,0.1);">{fmt_int(r["TOTAL BAIXA"])}</td>'
+            f'</tr>'
         )
     
     t_nn, t_cama, t_ns = df["Ninho Normal"].sum(), df["Cama"].sum(), df["Ninho Sujo"].sum()
@@ -1028,16 +1448,16 @@ def render_descarte_table_html(df):
     row_total = (
         f'<tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
         f'<td colspan="2" style="padding: 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">TOTAIS GERAIS DA SELEÇÃO</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_nn:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_cama:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_ns:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_def:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_sujog:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_ind:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_dg:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{t_trinc:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-left: 2px solid rgba(128,128,128,0.3); background-color: #475569;">{t_total:,}</td>'
-        f'</tr>'.replace(",", ".")
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{fmt_int(t_nn)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{fmt_int(t_cama)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{fmt_int(t_ns)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{fmt_int(t_def)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{fmt_int(t_sujog)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{fmt_int(t_ind)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{fmt_int(t_dg)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #64748B;">{fmt_int(t_trinc)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-left: 2px solid rgba(128,128,128,0.3); background-color: #475569;">{fmt_int(t_total)}</td>'
+        f'</tr>'
     )
     
     table_html = (
@@ -1073,26 +1493,26 @@ def render_estoque_sankhya_mtech_html(df):
         
         row_str = (
             f'<tr style="background-color: {bg}; border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 1px solid rgba(128,128,128,0.2); text-align: left;">{r["Nome Padrao"]}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2);">{r["Qtd MTech"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{r["Qtd Sankhya"]:,}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: {div_bg}; color: {div_color};">{div_val:,}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 1px solid rgba(128,128,128,0.2); text-align: left;">{html_escape(str(r["Nome Padrao"]))}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2);">{fmt_int(r["Qtd MTech"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{fmt_int(r["Qtd Sankhya"])}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: {div_bg}; color: {div_color};">{fmt_int(div_val)}</td>'
             f'</tr>'
         )
-        rows_html.append(row_str.replace(",", "."))
+        rows_html.append(row_str)
         
     t_mtech = df["Qtd MTech"].sum()
     t_sank = df["Qtd Sankhya"].sum()
-    t_div = df["Divergencia Qtd"].sum()
+    t_div = df["Divergencia Qtd"].abs().sum()
     
     row_total = (
         f'<tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
-        f'<td style="padding: 12px; text-align: left; border-right: 1px solid #CBD5E1;">Total</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_mtech:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{t_sank:,}</td>'
-        f'<td style="padding: 12px; text-align: right;">{t_div:,}</td>'
+        f'<td style="padding: 12px; text-align: left; border-right: 1px solid #CBD5E1;">Total (divergência absoluta)</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{fmt_int(t_mtech)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{fmt_int(t_sank)}</td>'
+        f'<td style="padding: 12px; text-align: right;">{fmt_int(t_div)}</td>'
         f'</tr>'
-    ).replace(",", ".")
+    )
 
     table_html = (
         '<div class="table-container-responsive">'
@@ -1120,26 +1540,26 @@ def render_estoque_cpo_sankhya_html(df):
         
         row_str = (
             f'<tr style="background-color: {bg}; border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 14.5px;">'
-            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 1px solid rgba(128,128,128,0.2); text-align: left;">{r["Nome Padrao"]}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2);">{r["Qtd Sankhya"]:,}</td>'
-            f'<td style="padding: 10px 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{r["Qtd CPO"]:,}</td>'
-            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: {div_bg}; color: {div_color};">{div_val:,}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 700; border-right: 1px solid rgba(128,128,128,0.2); text-align: left;">{html_escape(str(r["Nome Padrao"]))}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 1px solid rgba(128,128,128,0.2);">{fmt_int(r["Qtd Sankhya"])}</td>'
+            f'<td style="padding: 10px 12px; text-align: right; border-right: 2px solid rgba(128,128,128,0.3);">{fmt_int(r["Qtd CPO"])}</td>'
+            f'<td style="padding: 10px 12px; font-weight: 800; text-align: right; background-color: {div_bg}; color: {div_color};">{fmt_int(div_val)}</td>'
             f'</tr>'
         )
-        rows_html.append(row_str.replace(",", "."))
+        rows_html.append(row_str)
         
     t_sank = df["Qtd Sankhya"].sum()
     t_cpo = df["Qtd CPO"].sum()
-    t_div = df["Divergencia CPO"].sum()
+    t_div = df["Divergencia CPO"].abs().sum()
     
     row_total = (
         f'<tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">'
-        f'<td style="padding: 12px; text-align: left; border-right: 1px solid #CBD5E1;">Total</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{t_sank:,}</td>'
-        f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{t_cpo:,}</td>'
-        f'<td style="padding: 12px; text-align: right;">{t_div:,}</td>'
+        f'<td style="padding: 12px; text-align: left; border-right: 1px solid #CBD5E1;">Total (divergência absoluta)</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 1px solid #475569;">{fmt_int(t_sank)}</td>'
+        f'<td style="padding: 12px; text-align: right; border-right: 2px solid #CBD5E1;">{fmt_int(t_cpo)}</td>'
+        f'<td style="padding: 12px; text-align: right;">{fmt_int(t_div)}</td>'
         f'</tr>'
-    ).replace(",", ".")
+    )
 
     table_html = (
         '<div class="table-container-responsive">'
@@ -1161,10 +1581,16 @@ def render_estoque_cpo_sankhya_html(df):
 # 7. MENU LATERAL EXECUTIVO
 # ==============================================================================
 LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTe-sPP0AXsRUDhgN4R-IuHGi-b4iZTFGtyh8Ua9OLP_w&s=10"
+# Se existir um logo.png na mesma pasta do app, ele é usado (a miniatura do Google pode sair do ar).
+LOGO_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
+LOGO_SRC = LOGO_URL
+if os.path.exists(LOGO_LOCAL):
+    with open(LOGO_LOCAL, "rb") as _f_logo:
+        LOGO_SRC = "data:image/png;base64," + base64.b64encode(_f_logo.read()).decode()
 
 st.sidebar.markdown(f"""
 <div class="brand-box">
-    <img src="{LOGO_URL}" style="width: 44px; height: 44px; border-radius: 8px; object-fit: contain; background: #ffffff; padding: 3px; border: 1px solid rgba(255,255,255,0.2);">
+    <img src="{LOGO_SRC}" style="width: 44px; height: 44px; border-radius: 8px; object-fit: contain; background: #ffffff; padding: 3px; border: 1px solid rgba(255,255,255,0.2);">
     <div>
         <p class="brand-title">Granja - 117</p>
         <span class="brand-sub">Controle Operacional</span>
@@ -1200,7 +1626,11 @@ preco_unitario = st.sidebar.number_input(
     format="%.3f"
 )
 if round(preco_unitario, 4) != round(cotacao_salva, 4):
-    DatabaseManager.salvar_parametro("cotacao_ovo", preco_unitario)
+    try:
+        DatabaseManager.salvar_parametro("cotacao_ovo", preco_unitario)
+    except Exception:
+        show_error("Não foi possível salvar a cotação no banco. Verifique as permissões e se o arquivo SQLite está acessível.")
+        logging.exception("Falha ao persistir a cotação do ovo")
 
 valor_caixa_calc = preco_unitario * 360.0
 val_cx_str = f"R$ {valor_caixa_calc:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -1235,17 +1665,25 @@ if tela == "Dashboard":
     df_cpo = DatabaseManager.obter("df_est_cpo")
 
     if not df_prod.empty:
+        df_prod = df_prod.copy()
         df_prod["Núcleo_Lote"] = df_prod["Nome Fazenda"].astype(str) + "-" + df_prod["Nº Lote"].astype(str)
-        lotes_ativos = df_prod["Núcleo_Lote"].nunique()
-        soma_por_dia = df_prod.groupby("Data Produção")["Ovos"].sum()
+        datas_prod = pd.to_datetime(df_prod["Data Produção"], format="%d/%m/%Y", errors="coerce")
+        data_mais_recente = datas_prod.max()
+        if pd.notna(data_mais_recente):
+            lotes_ativos = df_prod.loc[datas_prod == data_mais_recente, "Núcleo_Lote"].nunique()
+        else:
+            lotes_ativos = 0
+        df_prod_com_data = df_prod[df_prod["Data Produção"].astype(str).str.strip() != ""].copy()
+        soma_por_dia = df_prod_com_data.groupby("Data Produção")["Ovos"].sum()
         dias_validos = soma_por_dia[soma_por_dia >= 10000]
-        media_prod_diaria = dias_validos.mean() if not dias_validos.empty else soma_por_dia.mean()
+        media_prod_diaria = dias_validos.mean() if not dias_validos.empty else (soma_por_dia.mean() if not soma_por_dia.empty else 0)
     else:
         lotes_ativos = 0
         media_prod_diaria = 0
 
     saldo_comercial = 0
     saldo_obi = 0
+    saldo_nao_mapeado = 0
     sankhya_nn = 0
 
     df_mtech = DatabaseManager.obter("df_est_mtech")
@@ -1255,16 +1693,19 @@ if tela == "Dashboard":
         df_m_temp["Nome Padrao"] = df_m_temp["Produto_Original"].str.strip().map(MAP_MTECH).fillna("Outros")
         saldo_obi = df_m_temp[df_m_temp["Nome Padrao"].isin(PADRAO_OBI)]["Quantidade"].sum()
         saldo_comercial = df_m_temp[df_m_temp["Nome Padrao"].isin(PADRAO_COMERCIAL)]["Quantidade"].sum()
+        saldo_nao_mapeado = df_m_temp.loc[df_m_temp["Nome Padrao"] == "Outros", "Quantidade"].sum()
     elif not df_sankhya.empty:
         df_s_temp = df_sankhya.copy()
         df_s_temp["Nome Padrao"] = df_s_temp["Produto_Original"].str.strip().map(MAP_SANKHYA).fillna("Outros")
         saldo_obi = df_s_temp[df_s_temp["Nome Padrao"].isin(PADRAO_OBI)]["Quantidade"].sum()
         saldo_comercial = df_s_temp[df_s_temp["Nome Padrao"].isin(PADRAO_COMERCIAL)]["Quantidade"].sum()
+        saldo_nao_mapeado = df_s_temp.loc[df_s_temp["Nome Padrao"] == "Outros", "Quantidade"].sum()
     elif not df_cpo.empty:
         df_c_temp = df_cpo.copy()
         df_c_temp["Nome Padrao"] = df_c_temp["Categoria_Original"].str.strip().map(MAP_CPO).fillna("Outros")
         saldo_obi = df_c_temp[df_c_temp["Nome Padrao"].isin(PADRAO_OBI)]["Quantidade"].sum()
         saldo_comercial = df_c_temp[df_c_temp["Nome Padrao"].isin(PADRAO_COMERCIAL)]["Quantidade"].sum()
+        saldo_nao_mapeado = df_c_temp.loc[df_c_temp["Nome Padrao"] == "Outros", "Quantidade"].sum()
 
     if not df_sankhya.empty:
         df_s_temp = df_sankhya.copy()
@@ -1318,12 +1759,18 @@ if tela == "Dashboard":
             <div>
                 <p class="kpi-title">Núcleos Ativos</p>
                 <p class="kpi-value">{lotes_ativos_fmt}</p>
-                <p class="kpi-sub" style="color: #64748B;">Em Produção</p>
+                <p class="kpi-sub" style="color: #64748B;">Na data de produção mais recente</p>
             </div>
         </div>
     </div>
     """
     st.markdown(kpis_top, unsafe_allow_html=True)
+    if saldo_nao_mapeado != 0:
+        show_warning(
+            f"Há {int(saldo_nao_mapeado):,} ovos em itens não mapeados. "
+            "Eles foram excluídos dos saldos Comercial/OBI até que a categoria seja configurada."
+            .replace(",", ".")
+        )
 
     st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
     render_section_title("grid", "Detalhamento de Produção por Núcleo e Lote (Matriz Dinâmica)")
@@ -1418,14 +1865,8 @@ if tela == "Dashboard":
             venda_cli = df_vendas.groupby("Cliente")[["Caixas_360", "Quantidade_Ovos"]].sum().reset_index()
             venda_cli["Faturamento"] = venda_cli["Quantidade_Ovos"] * preco_unitario
         else:
-            dados_demo = [
-                {"Cliente": "FRANGO AMERICANO", "Caixas_360": 200, "Quantidade_Ovos": 72000, "Faturamento": 185760.0},
-                {"Cliente": "KAZUNORI YAMAGUCHI", "Caixas_360": 140, "Quantidade_Ovos": 50400, "Faturamento": 130032.0},
-                {"Cliente": "S. BENEVIDES", "Caixas_360": 130, "Quantidade_Ovos": 47160, "Faturamento": 121672.8},
-                {"Cliente": "S/G", "Caixas_360": 40, "Quantidade_Ovos": 14400, "Faturamento": 37152.0},
-                {"Cliente": "SANTA BÁRBARA", "Caixas_360": 217, "Quantidade_Ovos": 78480, "Faturamento": 202478.4},
-            ]
-            venda_cli = pd.DataFrame(dados_demo)
+            venda_cli = pd.DataFrame(columns=["Cliente", "Caixas_360", "Quantidade_Ovos", "Faturamento"])
+            show_info("Nenhuma venda real foi importada. Carregue os romaneios para exibir clientes e faturamento.")
 
         col_filtro_cli, _ = st.columns([2, 3])
         with col_filtro_cli:
@@ -1437,55 +1878,55 @@ if tela == "Dashboard":
         else:
             venda_view = venda_cli.copy()
 
-        rows_html_cli = ""
+        # Monte cada linha em HTML compacto, sem indentação inicial. O Streamlit usa
+        # Markdown para interpretar st.markdown; linhas HTML indentadas podem virar
+        # blocos de código e mostrar literalmente as tags <tr> e <td>.
+        rows_html_cli = []
         for _, r in venda_view.iterrows():
             cx_str = f"{int(round(float(r['Caixas_360']))):,}".replace(",", ".")
             ov_str = f"{int(round(float(r['Quantidade_Ovos']))):,}".replace(",", ".")
             fat_str = f"R$ {float(r['Faturamento']):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            rows_html_cli += f"""
-                <tr style="border-bottom: 1px solid rgba(128,128,128,0.2);">
-                    <td style="padding: 10px 14px; font-weight: 700; text-align: left;">{r['Cliente']}</td>
-                    <td style="padding: 10px 14px; text-align: center;">{cx_str}</td>
-                    <td style="padding: 10px 14px; text-align: center;">{ov_str}</td>
-                    <td style="padding: 10px 14px; text-align: right; font-weight: 700; color: #166534;">{fat_str}</td>
-                </tr>
-            """
-            
+            cliente_html = html_escape(str(r["Cliente"]))
+            rows_html_cli.append(
+                '<tr style="border-bottom:1px solid rgba(128,128,128,0.2);">'
+                f'<td style="padding:10px 14px;font-weight:700;text-align:left;">{cliente_html}</td>'
+                f'<td style="padding:10px 14px;text-align:center;">{cx_str}</td>'
+                f'<td style="padding:10px 14px;text-align:center;">{ov_str}</td>'
+                f'<td style="padding:10px 14px;text-align:right;font-weight:700;color:#166534;">{fat_str}</td>'
+                '</tr>'
+            )
+
         tot_cx = int(round(float(venda_view["Caixas_360"].sum())))
         tot_ov = int(round(float(venda_view["Quantidade_Ovos"].sum())))
         tot_fat = float(venda_view["Faturamento"].sum())
-        
         tot_cx_str = f"{tot_cx:,}".replace(",", ".")
         tot_ov_str = f"{tot_ov:,}".replace(",", ".")
         tot_fat_str = f"R$ {tot_fat:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-        totais_html_cli = f"""
-            <tr style="background-color: #334155; color: #FFFFFF; font-weight: 800; font-size: 15px;">
-                <td style="padding: 12px 14px; text-align: left;">TOTAIS GERAIS</td>
-                <td style="padding: 12px 14px; text-align: center;">{tot_cx_str}</td>
-                <td style="padding: 12px 14px; text-align: center;">{tot_ov_str}</td>
-                <td style="padding: 12px 14px; text-align: right;">{tot_fat_str}</td>
-            </tr>
-        """
+        totais_html_cli = (
+            '<tr style="background-color:#334155;color:#FFFFFF;font-weight:800;font-size:15px;">'
+            '<td style="padding:12px 14px;text-align:left;">TOTAIS GERAIS</td>'
+            f'<td style="padding:12px 14px;text-align:center;">{tot_cx_str}</td>'
+            f'<td style="padding:12px 14px;text-align:center;">{tot_ov_str}</td>'
+            f'<td style="padding:12px 14px;text-align:right;">{tot_fat_str}</td>'
+            '</tr>'
+        )
 
-        st.markdown(f"""
-            <div class="table-container-responsive">
-                <table style="width: 100%; border-collapse: collapse; text-align: center;">
-                    <thead>
-                        <tr style="background-color: #166534; color: #FFFFFF; font-weight: 700; font-size: 14px;">
-                            <th style="padding: 12px 14px; text-align: left;">Cliente</th>
-                            <th style="padding: 12px 14px; text-align: center;">Caixas (360)</th>
-                            <th style="padding: 12px 14px; text-align: center;">Quantidade de Ovos</th>
-                            <th style="padding: 12px 14px; text-align: right;">Faturamento (R$)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows_html_cli}
-                        {totais_html_cli}
-                    </tbody>
-                </table>
-            </div>
-        """, unsafe_allow_html=True)
+        # Uma única string HTML sem indentação Markdown na coluna zero.
+        html_tabela_clientes = (
+            '<div class="table-container-responsive">'
+            '<table style="width:100%;border-collapse:collapse;text-align:center;">'
+            '<thead><tr style="background-color:#166534;color:#FFFFFF;font-weight:700;font-size:14px;">'
+            '<th style="padding:12px 14px;text-align:left;">Cliente</th>'
+            '<th style="padding:12px 14px;text-align:center;">Caixas (360)</th>'
+            '<th style="padding:12px 14px;text-align:center;">Quantidade de Ovos</th>'
+            '<th style="padding:12px 14px;text-align:right;">Faturamento (R$)</th>'
+            '</tr></thead><tbody>'
+            + ''.join(rows_html_cli)
+            + totais_html_cli
+            + '</tbody></table></div>'
+        )
+        st.markdown(html_tabela_clientes, unsafe_allow_html=True)
     else:
         tot_ovos_obi = df_transf["Quantidade_Ovos"].sum() if not df_transf.empty else 0
         tot_caixas_obi = tot_ovos_obi / 360
@@ -1549,15 +1990,28 @@ elif tela == "Central de Carga de Arquivos":
     )
 
     if arquivos_unificados:
-        for arq in arquivos_unificados:
-            try:
-                tipo_identificado, qtd_reg, qtd_dups = inspecionar_e_processar_conteudo(arq)
-                if qtd_dups > 0:
-                    show_warning(f"⚠️ **Alerta de Registros Repetidos:** Na planilha de **{tipo_identificado}**, foram identificadas {qtd_dups} linha(s) com Lote/Data que já constavam no banco de dados. Verifique se esta ficha já havia sido lançada anteriormente!")
-                else:
-                    show_success(f"Conteúdo identificado como **{tipo_identificado}** — {qtd_reg} registos sincronizados na base!")
-            except Exception as e:
-                show_error(f"Não foi possível identificar a estrutura interna do ficheiro: {e}")
+        st.info("Os arquivos só serão importados quando você clicar no botão abaixo. Isso evita reprocessamento automático ao interagir com a tela.")
+        if st.button("Processar arquivos selecionados", type="primary", key="processar_arquivos_selecionados"):
+            for arq in arquivos_unificados:
+                try:
+                    st.session_state["_linhas_ignoradas_ultima"] = 0
+                    tipo_identificado, qtd_reg, qtd_dups = inspecionar_e_processar_conteudo(arq)
+                    qtd_ignoradas = st.session_state.pop("_linhas_ignoradas_ultima", 0)
+                    if qtd_ignoradas > 0:
+                        show_warning(
+                            f"{qtd_ignoradas} linha(s) de **{getattr(arq, 'name', 'arquivo')}** foram ignoradas por formato inválido "
+                            "(data, lote ou quantidade). Confira a planilha de origem."
+                        )
+                    if qtd_dups > 0:
+                        show_warning(
+                            f"Na planilha de {tipo_identificado}, foram encontradas {qtd_dups} chave(s) repetida(s) "
+                            "no arquivo ou já existente(s) no histórico. Confira se é uma reimportação legítima."
+                        )
+                    else:
+                        show_success(f"Conteúdo identificado como {tipo_identificado}: {qtd_reg} registro(s) recebidos e sincronizados.")
+                except Exception as e:
+                    logging.exception("Falha ao processar arquivo %s", getattr(arq, "name", "sem nome"))
+                    show_error(f"Não foi possível processar {getattr(arq, 'name', 'o arquivo')}: {e}")
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
@@ -1583,7 +2037,11 @@ elif tela == "Central de Carga de Arquivos":
                 "Selecione uma base caso deseje limpar os seus registos:",
                 ["Selecione...", "df_reclass", "df_rec_mtech", "df_desc_mtech", "df_prod", "df_vendas", "df_transf", "df_est_cpo", "df_est_sankhya", "df_est_mtech", "TODAS AS TABELAS"]
             )
-            if st.button("Limpar Base Selecionada"):
+            confirmar_limpeza = st.checkbox(
+                "Confirmo que desejo excluir os registros selecionados.",
+                key="confirmar_limpeza_base",
+            )
+            if st.button("Limpar Base Selecionada", disabled=not confirmar_limpeza):
                 if tab_para_limpar == "TODAS AS TABELAS":
                     for t in ["df_reclass", "df_rec_mtech", "df_desc_mtech", "df_prod", "df_vendas", "df_transf", "df_est_cpo", "df_est_sankhya", "df_est_mtech"]:
                         DatabaseManager.limpar_tabela(t)
@@ -1626,7 +2084,7 @@ elif tela == "Produção Diária (MTech)":
             lotes_unicos = ["Todos"] + sorted(list(df_p["Nº Lote"].dropna().unique().astype(str)))
             filtro_lot = st.selectbox("🏷️ Filtrar por Lote:", lotes_unicos)
         with c_f2:
-            datas_unicas = ["Todas as Datas"] + sorted(list(df_p["Data Produção"].dropna().unique()), reverse=True)
+            datas_unicas = ["Todas as Datas"] + sorted(list(df_p["Data Produção"].dropna().unique()), key=chave_ordenacao_data, reverse=True)
             filtro_dt = st.selectbox("📅 Filtrar por Data de Produção:", datas_unicas)
         with c_f3:
             tipos_unicos = ["Todos os Tipos"] + sorted(list(df_p["Nome Produto"].dropna().unique()))
@@ -1645,7 +2103,11 @@ elif tela == "Produção Diária (MTech)":
         df_display = df_filtered[cols_para_exibir].copy()
         df_display.columns = ["Lote", "Tipo de Ovo", "Data de Produção", "Quantidade"]
         
-        df_display = df_display.sort_values(by=["Data de Produção", "Lote", "Tipo de Ovo"], ascending=[False, True, True])
+        df_display = (
+            df_display.assign(_ord=df_display["Data de Produção"].map(chave_ordenacao_data))
+            .sort_values(by=["_ord", "Lote", "Tipo de Ovo"], ascending=[False, True, True])
+            .drop(columns="_ord")
+        )
 
         total_ovos = df_display["Quantidade"].sum()
 
@@ -1688,7 +2150,7 @@ elif tela == "Validação de Reclassificação":
         
         with col_f1:
             unicos_proc = [d for d in df_r_original["Data_Processamento"].unique() if str(d).strip() != ""]
-            datas_proc = ["Todos os Processamentos"] + sorted(list(unicos_proc), reverse=True)
+            datas_proc = ["Todos os Processamentos"] + sorted(list(unicos_proc), key=chave_ordenacao_data, reverse=True)
             filtro_proc = st.selectbox("Data de Transação (Processamento):", datas_proc)
 
         with col_f2:
@@ -1697,7 +2159,7 @@ elif tela == "Validação de Reclassificação":
             else:
                 datas_post_validas = df_r_original["Data_Postura"].dropna().unique()
                 
-            datas_post = ["Todas as Datas"] + sorted(list(datas_post_validas), reverse=True)
+            datas_post = ["Todas as Datas"] + sorted(list(datas_post_validas), key=chave_ordenacao_data, reverse=True)
             filtro_dt = st.selectbox("Data de Postura (Produção):", datas_post)
 
         df_r = df_r_original.copy()
@@ -1771,7 +2233,7 @@ elif tela == "Validação de Reclassificação":
             tot_saida_ns = df_r[df_r["Origem"] == "Ninho Sujo"]["Saldo_Inicial"].sum()
             tot_saida_cm = df_r[df_r["Origem"] == "Cama"]["Saldo_Inicial"].sum()
 
-            mtech_saidas = df_rec_m_sub[df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("Cr[é|e]dito", case=False, na=False)]
+            mtech_saidas = df_rec_m_sub[df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("Cr[eé]dito", case=False, na=False)]
             mtech_saida_nn = mtech_saidas[mtech_saidas["Categoria_Normalizada"] == "Ninho Normal"]["Ovos"].sum()
             mtech_saida_ns = mtech_saidas[mtech_saidas["Categoria_Normalizada"] == "Ninho Sujo"]["Ovos"].sum()
             mtech_saida_cm = mtech_saidas[mtech_saidas["Categoria_Normalizada"] == "Cama"]["Ovos"].sum()
@@ -1787,7 +2249,7 @@ elif tela == "Validação de Reclassificação":
             tot_dest_ficha = df_comercial[["Sujo", "Deformado", "Ninho_Sujo", "Industrial", "Duas_Gemas", "Ovo_Limpo", "Trincado"]].sum().sum()
             
             tot_cred_m = df_rec_m_sub[
-                (df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("D[é|e]bito", case=False, na=False)) &
+                (df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("D[eé]bito", case=False, na=False)) &
                 (df_rec_m_sub["Categoria_Normalizada"].isin(categorias_alvo))
             ]["Ovos"].sum()
             
@@ -1804,7 +2266,7 @@ elif tela == "Validação de Reclassificação":
             linhas_validacao_reclass = []
             for nome_exib, cat_chave, qtd_f in cats_comerciais:
                 qtd_m = df_rec_m_sub[
-                    (df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("D[é|e]bito", case=False, na=False)) & 
+                    (df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains("D[eé]bito", case=False, na=False)) & 
                     (df_rec_m_sub["Categoria_Normalizada"] == cat_chave)
                 ]["Ovos"].sum()
                 
@@ -1819,6 +2281,10 @@ elif tela == "Validação de Reclassificação":
 
             df_val_reclass = pd.DataFrame(linhas_validacao_reclass)
             tot_div_abs_reclass = df_val_reclass["Divergência"].abs().sum()
+            mascara_debito_reclass = df_rec_m_sub["Cód Trans Ovo"].astype(str).str.contains(r"D[eé]bito", case=False, na=False)
+            ovos_sem_categoria_reclass = int(df_rec_m_sub.loc[
+                mascara_debito_reclass & (df_rec_m_sub["Categoria_Normalizada"] == "Outros"), "Ovos"
+            ].sum()) if not df_rec_m_sub.empty else 0
 
             tot_dest_ficha_fmt = f"{int(tot_dest_ficha):,}".replace(",", ".")
             tot_cred_m_fmt = f"{int(tot_cred_m):,}".replace(",", ".")
@@ -1826,12 +2292,12 @@ elif tela == "Validação de Reclassificação":
             c_val1, c_val2 = st.columns(2)
             with c_val1:
                 st.markdown(f"""
-                <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if tot_div_abs_reclass == 0 else '#DC2626'}; min-height: 105px;">
+                <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if tot_div_abs_reclass == 0 and ovos_sem_categoria_reclass == 0 else '#D97706' if tot_div_abs_reclass == 0 else '#DC2626'}; min-height: 105px;">
                     <div class="kpi-svg-box">{SVG_ICONS["check"] if tot_div_abs_reclass == 0 else SVG_ICONS["x"]}</div>
                     <div>
                         <p class="kpi-title">Balanço Total de Reclassificação</p>
                         <p class="kpi-value" style="color: {'#16A34A' if tot_div_abs_reclass == 0 else '#DC2626'}; font-size: 1.4rem;">
-                            {'✅ 100% Validado' if tot_div_abs_reclass == 0 else f'❌ Divergência Absoluta: {tot_div_abs_reclass:,} ovos'.replace(',', '.')}
+                            {'✅ 100% Validado' if tot_div_abs_reclass == 0 and ovos_sem_categoria_reclass == 0 else (f'⚠️ Incompleto: {ovos_sem_categoria_reclass:,} ovos sem categoria'.replace(',', '.') if tot_div_abs_reclass == 0 else f'❌ Divergência Absoluta: {tot_div_abs_reclass:,} ovos'.replace(',', '.'))}
                         </p>
                         <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Ficha CPO: {tot_dest_ficha_fmt} | MTech (Entrada): {tot_cred_m_fmt}</p>
                     </div>
@@ -1858,6 +2324,8 @@ elif tela == "Validação de Reclassificação":
             }
 
             st.dataframe(df_val_reclass.style.apply(lambda x: ['font-weight: bold; background-color: rgba(148, 163, 184, 0.25)' if x.name == df_val_reclass.index[-1] else '' for _ in x], axis=1), use_container_width=True, hide_index=True)
+            if ovos_sem_categoria_reclass > 0:
+                show_warning(f"Existem {ovos_sem_categoria_reclass:,} ovos em débitos MTech cuja categoria foi classificada como 'Outros'. A validação não pode ser considerada completa até revisar esses itens.".replace(',', '.'))
         st.markdown('</div>', unsafe_allow_html=True)
 
         buf = io.BytesIO()
@@ -1888,7 +2356,7 @@ elif tela == "Validação de Descartes":
         col_f1, col_f2, _ = st.columns([2, 2, 3])
         with col_f1:
             unicos_proc = [d for d in df_r_original["Data_Processamento"].unique() if str(d).strip() != ""]
-            datas_proc = ["Todos os Processamentos"] + sorted(list(unicos_proc), reverse=True)
+            datas_proc = ["Todos os Processamentos"] + sorted(list(unicos_proc), key=chave_ordenacao_data, reverse=True)
             filtro_proc = st.selectbox("Data de Transação (Processamento):", datas_proc, key="desc_filtro_proc")
 
         with col_f2:
@@ -1897,7 +2365,7 @@ elif tela == "Validação de Descartes":
             else:
                 datas_post_validas = df_r_original["Data_Postura"].dropna().unique()
                 
-            datas_post = ["Todas as Datas"] + sorted(list(datas_post_validas), reverse=True)
+            datas_post = ["Todas as Datas"] + sorted(list(datas_post_validas), key=chave_ordenacao_data, reverse=True)
             filtro_dt = st.selectbox("Data de Postura (Produção):", datas_post, key="desc_filtro_dt")
 
         df_r = df_r_original.copy()
@@ -1933,7 +2401,12 @@ elif tela == "Validação de Descartes":
 
         df_desc_final = df_desc_final.groupby(["Data_Postura", "Lote"])[all_cols].sum().reset_index()
         df_desc_final["TOTAL BAIXA"] = df_desc_final[all_cols].sum(axis=1).fillna(0).astype(int)
-        df_desc_final = df_desc_final[df_desc_final["TOTAL BAIXA"] > 0].sort_values(by=["Data_Postura", "Lote"], ascending=[False, True])
+        df_desc_final = df_desc_final[df_desc_final["TOTAL BAIXA"] > 0]
+        df_desc_final = (
+            df_desc_final.assign(_ord=df_desc_final["Data_Postura"].map(chave_ordenacao_data))
+            .sort_values(by=["_ord", "Lote"], ascending=[False, True])
+            .drop(columns="_ord")
+        )
 
         st.markdown('<div class="saas-panel">', unsafe_allow_html=True)
         render_section_title("clipboard", "1. Lançamento Físico de Baixa & Descarte (CPO)")
@@ -1951,16 +2424,40 @@ elif tela == "Validação de Descartes":
 
         df_desc_m_sub = df_desc_mtech_orig.copy()
         if not df_desc_m_sub.empty:
-            if filtro_proc != "Todos os Processamentos":
-                df_desc_m_sub = df_desc_m_sub[df_desc_m_sub["Data Transação"] == filtro_proc]
-            if filtro_dt != "Todas as Datas":
-                df_desc_m_sub = df_desc_m_sub[df_desc_m_sub["Data Produção"] == filtro_dt]
-
-            col_nome_desc = "Produto" if "Produto" in df_desc_m_sub.columns else ("Nome Produto" if "Nome Produto" in df_desc_m_sub.columns else "")
-            if col_nome_desc:
-                df_desc_m_sub["Categoria_Normalizada"] = df_desc_m_sub[col_nome_desc].apply(mapear_categoria_mtech)
+            # Registros gravados por versões antigas não dizem de qual coluna veio
+            # a quantidade; podem conter saldo de produção em vez de descarte.
+            # Excluí-los da comparação impede a falsa divergência até reimportação.
+            if "Coluna_Quantidade_Origem" not in df_desc_m_sub.columns:
+                show_warning(
+                    "Os registros MTech de descarte existentes foram importados por uma versão antiga "
+                    "e não identificam a coluna usada para a quantidade. Eles foram excluídos desta "
+                    "comparação para evitar considerar saldo de produção como descarte. Faça backup, "
+                    "limpe somente a tabela df_desc_mtech na manutenção da base e reimporte os relatórios de descarte corretos."
+                )
+                df_desc_m_sub = df_desc_m_sub.iloc[0:0].copy()
             else:
-                df_desc_m_sub["Categoria_Normalizada"] = "Outros"
+                coluna_origem_vazia = (
+                    df_desc_m_sub["Coluna_Quantidade_Origem"].isna()
+                    | df_desc_m_sub["Coluna_Quantidade_Origem"].astype(str).str.strip().eq("")
+                )
+                if coluna_origem_vazia.any():
+                    show_warning(
+                        f"{int(coluna_origem_vazia.sum())} registro(s) MTech antigos não possuem rastreabilidade da coluna de quantidade e foram excluídos da comparação. "
+                        "Faça backup, limpe somente df_desc_mtech e reimporte os relatórios corretos para reconstruir o histórico."
+                    )
+                    df_desc_m_sub = df_desc_m_sub.loc[~coluna_origem_vazia].copy()
+
+            if not df_desc_m_sub.empty:
+                if filtro_proc != "Todos os Processamentos" and "Data Transação" in df_desc_m_sub.columns:
+                    df_desc_m_sub = df_desc_m_sub[df_desc_m_sub["Data Transação"] == filtro_proc]
+                if filtro_dt != "Todas as Datas" and "Data Produção" in df_desc_m_sub.columns:
+                    df_desc_m_sub = df_desc_m_sub[df_desc_m_sub["Data Produção"] == filtro_dt]
+
+                col_nome_desc = "Produto" if "Produto" in df_desc_m_sub.columns else ("Nome Produto" if "Nome Produto" in df_desc_m_sub.columns else "")
+                if col_nome_desc:
+                    df_desc_m_sub["Categoria_Normalizada"] = df_desc_m_sub[col_nome_desc].apply(mapear_categoria_mtech)
+                else:
+                    df_desc_m_sub["Categoria_Normalizada"] = "Outros"
 
         tot_desc_esperado_cpo = df_desc_final["TOTAL BAIXA"].sum() if not df_desc_final.empty else 0
         
@@ -1981,6 +2478,9 @@ elif tela == "Validação de Descartes":
         
         categorias_descarte_ativas = ["Ninho Normal", "Cama", "Ninho Sujo", "Deformado", "Sujo", "Industrial", "Duas Gemas", "Trincado", "Perda Galpão"]
         tot_desc_m = df_desc_m_sub[df_desc_m_sub["Categoria_Normalizada"].isin(categorias_descarte_ativas)]["Ovos"].sum() if not df_desc_m_sub.empty else 0
+        ovos_sem_categoria_desc = int(df_desc_m_sub.loc[
+            df_desc_m_sub["Categoria_Normalizada"] == "Outros", "Ovos"
+        ].sum()) if not df_desc_m_sub.empty else 0
 
         cats_descartes = [
             ("Ninho Normal", "Ninho Normal", "Ninho Normal"),
@@ -2026,11 +2526,11 @@ elif tela == "Validação de Descartes":
 
         st.markdown(f"""
         <div class="kpi-container">
-            <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if tot_div_abs_desc == 0 else '#DC2626'};">
+            <div class="kpi-card" style="border-left: 5px solid {'#16A34A' if tot_div_abs_desc == 0 and ovos_sem_categoria_desc == 0 else '#D97706' if tot_div_abs_desc == 0 else '#DC2626'};">
                 <div>
                     <p class="kpi-title">Balanço Total de Descartes</p>
                     <p class="kpi-value" style="color: {'#16A34A' if tot_div_abs_desc == 0 else '#DC2626'}; font-size: 1.35rem;">
-                        {'✅ 100% Validado' if tot_div_abs_desc == 0 else f'❌ Divergência Real: {tot_div_abs_desc:,} ovos'.replace(',', '.')}
+                        {'✅ 100% Validado' if tot_div_abs_desc == 0 and ovos_sem_categoria_desc == 0 else (f'⚠️ Incompleto: {ovos_sem_categoria_desc:,} ovos sem categoria'.replace(',', '.') if tot_div_abs_desc == 0 else f'❌ Divergência Real: {tot_div_abs_desc:,} ovos'.replace(',', '.'))}
                     </p>
                     <p class="kpi-sub" style="color: var(--text-color); opacity: 0.8;">Total Esperado: {tot_esp_geral_fmt} | MTech: {tot_desc_m_fmt}</p>
                 </div>
@@ -2063,6 +2563,8 @@ elif tela == "Validação de Descartes":
         }
 
         st.dataframe(df_val_desc.style.apply(lambda x: ['font-weight: bold; background-color: rgba(148, 163, 184, 0.25)' if x.name == df_val_desc.index[-1] else '' for _ in x], axis=1), use_container_width=True, hide_index=True)
+        if ovos_sem_categoria_desc > 0:
+            show_warning(f"Existem {ovos_sem_categoria_desc:,} ovos nos descartes MTech cuja categoria não foi reconhecida. A validação não pode ser considerada completa até revisar esses itens.".replace(',', '.'))
         st.markdown('</div>', unsafe_allow_html=True)
 
         buf = io.BytesIO()
@@ -2090,7 +2592,7 @@ elif tela == "Validação Estoque (MTech x Sankhya x CPO)":
     if df_s.empty or df_m.empty:
         show_warning("Para o comparativo funcionar, envie os relatórios de **Estoque do MTech** e **Estoque do Sankhya** na Central de Carga.")
     else:
-        df_m["Nome Padrao"] = df_m["Produto_Original"].map(MAP_MTECH).fillna("Outros")
+        df_m["Nome Padrao"] = df_m["Produto_Original"].astype(str).str.strip().map(MAP_MTECH).fillna("Outros")
         mtech_agg = df_m.groupby("Nome Padrao")["Quantidade"].sum().reset_index()
         mtech_agg.rename(columns={"Quantidade": "Qtd MTech"}, inplace=True)
 
@@ -2131,3 +2633,31 @@ elif tela == "Validação Estoque (MTech x Sankhya x CPO)":
         else:
             st.markdown(render_estoque_cpo_sankhya_html(df_est), unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
+
+        itens_nao_mapeados = []
+        for sistema, df_origem, coluna_nome, mapa in [
+            ("MTech", df_m, "Produto_Original", MAP_MTECH),
+            ("Sankhya", df_s, "Produto_Original", MAP_SANKHYA),
+            ("CPO", df_c, "Categoria_Original", MAP_CPO),
+        ]:
+            if df_origem.empty or coluna_nome not in df_origem.columns:
+                continue
+            nomes = df_origem[coluna_nome].fillna("").astype(str).str.strip()
+            mascara_sem_mapa = nomes.ne("") & nomes.map(mapa).isna()
+            if mascara_sem_mapa.any():
+                df_itens = df_origem.loc[mascara_sem_mapa, [coluna_nome, "Quantidade"]].copy()
+                df_itens.columns = ["Item Original", "Quantidade"]
+                df_itens.insert(0, "Sistema", sistema)
+                itens_nao_mapeados.append(df_itens)
+
+        if itens_nao_mapeados:
+            df_nao_mapeados = pd.concat(itens_nao_mapeados, ignore_index=True)
+            show_warning(
+                f"Foram encontrados {len(df_nao_mapeados)} item(ns) sem mapeamento de categoria. "
+                "Eles aparecem como 'Outros' no comparativo; revise a lista abaixo para evitar que itens fiquem fora dos saldos Comercial/OBI."
+            )
+            st.dataframe(
+                df_nao_mapeados.sort_values(["Sistema", "Item Original"], kind="stable"),
+                use_container_width=True,
+                hide_index=True,
+            )
